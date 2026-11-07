@@ -158,7 +158,7 @@ ISR(TIMER1_COMPA_vect) { PORTB ^= (1 << PB0); }
 int main(void) {
     DDRB |= (1 << PB0);
     TCCR1B = (1 << WGM12) | (1 << CS12) | (1 << CS10);
-    OCR1A = 31249; TIMSK |= (1 << OCIE1A); sei();
+    OCR1A = 31249; TIMSK |= (1 << OCIE1A); TCCR1B = (1 << WGM12) | (1 << CS12); sei();
     while (1) {}
 }
 """,
@@ -446,10 +446,13 @@ int main(void) {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 if (!loadingSource) {
-                    sourceTabs.getOrNull(currentTabIndex)?.dirty = true
+                    val activeTab = sourceTabs.getOrNull(currentTabIndex)
+                    if (activeTab != null && !activeTab.dirty) {
+                        activeTab.dirty = true
+                        if (::filenameLabel.isInitialized) filenameLabel.text = "● " + activeTab.name
+                        if (::tabsBar.isInitialized) renderTabs()
+                    }
                     scheduleSessionSave()
-                    if (::filenameLabel.isInitialized) filenameLabel.text = "● " + (sourceTabs.getOrNull(currentTabIndex)?.name ?: "")
-                    if (::tabsBar.isInitialized) renderTabs()
                 }
                 val lines = (s?.count { it == '\n' } ?: 0) + 1
                 gutter.text = (1..lines).joinToString("\n")
