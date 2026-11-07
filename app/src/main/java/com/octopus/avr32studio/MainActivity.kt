@@ -671,8 +671,8 @@ int main(void) {
 
     private fun showSearchDialog() {
         val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(8), dp(18), 0) }
-        val query = EditText(this).apply { hint = "Find text"; singleLine = true }
-        val replacement = EditText(this).apply { hint = "Replace with (optional)"; singleLine = true }
+        val query = EditText(this).apply { hint = "Find text"; setSingleLine(true) }
+        val replacement = EditText(this).apply { hint = "Replace with (optional)"; setSingleLine(true) }
         panel.addView(query); panel.addView(replacement)
         val dialog = android.app.AlertDialog.Builder(this).setTitle("Find / Replace")
             .setView(panel).setPositiveButton("Find next", null)
@@ -796,7 +796,7 @@ int main(void) {
         val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
         val sourceText = clockDefine(editor.text.toString(), selectedHz)
         status.text = "●  VERIFY RUNNING"
-        statusBar.text = "\${status.text}  ·  \${selectedHz/1000000} MHz"
+        statusBar.text = "${status.text}  ·  ${selectedHz/1000000} MHz"
         status.setTextColor(accent()); log.text = "Checking source in background..."
         Thread {
             try {
@@ -805,9 +805,9 @@ int main(void) {
                 val outputFile = File(dir, "verify-output.log")
                 val toolchain = File(filesDir, "toolchain")
                 val process = avrProcessBuilder(
-                    "-B\${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/",
-                    "-I\${File(toolchain, "avr/include").absolutePath}",
-                    "-mmcu=$mcu", "-DF_CPU=\${selectedHz}UL", "-std=gnu11", "-Os",
+                    "-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/",
+                    "-I${File(toolchain, "avr/include").absolutePath}",
+                    "-mmcu=$mcu", "-DF_CPU=${selectedHz}UL", "-std=gnu11", "-Os",
                     "-fsyntax-only", source.absolutePath
                 ).redirectErrorStream(true).redirectOutput(outputFile).start()
                 if (!process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) {
@@ -818,7 +818,7 @@ int main(void) {
                 val code = process.exitValue()
                 runOnUiThread {
                     status.text = if (code == 0) "●  VERIFY PASSED" else "●  VERIFY FAILED"
-                    statusBar.text = "\${status.text}  ·  \${selectedHz/1000000} MHz"
+                    statusBar.text = "${status.text}  ·  ${selectedHz/1000000} MHz"
                     status.setTextColor(if (code == 0) Color.rgb(46, 190, 130) else Color.RED)
                     log.text = if (output.isBlank()) "No compiler errors found." else output
                     buildInProgress = false
