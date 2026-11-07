@@ -321,11 +321,12 @@ int main(void) {
             if (stroke != null) setStroke(dp(1), stroke)
         }
 
-    private fun page() = if (dark) Color.rgb(16, 24, 39) else Color.rgb(246, 248, 252)
-    private fun panel() = if (dark) Color.rgb(25, 38, 58) else Color.WHITE
-    private fun text() = if (dark) Color.rgb(213, 222, 234) else Color.rgb(28, 42, 61)
-    private fun muted() = if (dark) Color.rgb(143, 163, 188) else Color.rgb(105, 120, 140)
-    private fun accent() = Color.rgb(59, 130, 246)
+    // Dark Graphite palette with an electric mint accent.
+    private fun page() = if (dark) Color.rgb(15, 17, 18) else Color.rgb(246, 248, 247)
+    private fun panel() = if (dark) Color.rgb(27, 31, 32) else Color.WHITE
+    private fun text() = if (dark) Color.rgb(232, 239, 236) else Color.rgb(28, 42, 37)
+    private fun muted() = if (dark) Color.rgb(157, 171, 165) else Color.rgb(105, 120, 112)
+    private fun accent() = Color.rgb(82, 214, 176)
     private fun clockDefine(source: String, hz: Long = selectedClockHz()): String {
         val definition = "#define F_CPU ${hz}UL"
         val pattern = Regex("(?m)^\\s*#\\s*define\\s+F_CPU\\s+[^\\r\\n]+")
@@ -356,20 +357,19 @@ int main(void) {
             gravity = Gravity.CENTER_VERTICAL
         }
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        brand.addView(label("OctoAVR32A", 19f, true, text()))
+        brand.addView(label("OctoAVR32A", if (compact) 17f else 20f, true, text()))
         brand.addView(label("AVR DEVELOPMENT STUDIO", 9f, true, muted()))
         toolbar.addView(brand, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        val newFile = toolbarAction("+", "New source") { createNewSource() }
-        val openFile = toolbarAction("▱", "Open source") { openSource() }
-        val saveFile = toolbarAction("▣", "Save source") { saveSourceAs() }
-        val search = toolbarAction("⌕", "Find and replace") { showSearchDialog() }
         val verify = toolbarAction("✓", "Verify source") { verifySource() }
         val build = toolbarAction("▶", "Build firmware") { compile() }
-        val more = toolbarAction("⋮", "More tools and settings") { showDrawer(toolbar) }
-        toolbar.addView(newFile)
-        toolbar.addView(openFile)
-        toolbar.addView(saveFile)
-        toolbar.addView(search)
+        val more = toolbarAction("⋮", "Files, examples and settings") { showDrawer(toolbar) }
+        // On phones, secondary actions live in the More menu to prevent clipped controls.
+        if (!compact) {
+            toolbar.addView(toolbarAction("+", "New source") { createNewSource() })
+            toolbar.addView(toolbarAction("▱", "Open source") { openSource() })
+            toolbar.addView(toolbarAction("▣", "Save source") { saveSourceAs() })
+            toolbar.addView(toolbarAction("⌕", "Find and replace") { showSearchDialog() })
+        }
         toolbar.addView(verify)
         toolbar.addView(build)
         toolbar.addView(more)
@@ -423,7 +423,7 @@ int main(void) {
             setTextColor(muted())
             setPadding(dp(8), dp(12), dp(8), dp(12))
             gravity = Gravity.TOP or Gravity.END
-            setBackgroundColor(if (dark) Color.rgb(13, 25, 44) else Color.rgb(239, 244, 250))
+            setBackgroundColor(if (dark) Color.rgb(19, 22, 23) else Color.rgb(239, 244, 241))
             text = "1"
         }
         editorCard.addView(gutter, LinearLayout.LayoutParams(dp(38), ViewGroup.LayoutParams.MATCH_PARENT))
@@ -659,7 +659,9 @@ int main(void) {
             setTextColor(accent())
             gravity = Gravity.CENTER
             background = bg(panel(), 10)
-            setPadding(dp(11), dp(7), dp(11), dp(7))
+            setPadding(dp(9), dp(7), dp(9), dp(7))
+            minimumWidth = dp(42)
+            minimumHeight = dp(42)
             setOnClickListener { action() }
         }
 
@@ -673,7 +675,7 @@ int main(void) {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(20), dp(18), dp(16))
-            setBackgroundColor(if (dark) Color.rgb(18, 31, 49) else Color.rgb(235, 243, 253))
+            setBackgroundColor(if (dark) Color.rgb(21, 25, 25) else Color.rgb(235, 243, 239))
         }
         val brandRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val brandMark = TextView(this).apply {
@@ -720,20 +722,20 @@ int main(void) {
                 minimumHeight = dp(58)
                 setPadding(dp(10), dp(7), dp(8), dp(7))
                 background = bg(
-                    if (dark) Color.rgb(30, 47, 70) else Color.rgb(246, 249, 253),
+                    if (dark) Color.rgb(34, 40, 39) else Color.rgb(246, 249, 247),
                     11,
-                    if (dark) Color.rgb(43, 63, 88) else Color.rgb(224, 232, 242)
+                    if (dark) Color.rgb(54, 65, 61) else Color.rgb(224, 232, 228)
                 )
                 isClickable = true
                 isFocusable = true
                 setOnClickListener { action() }
             }
             val iconTile = FrameLayout(this).apply {
-                background = bg(if (dark) Color.rgb(22, 39, 61) else Color.rgb(231, 240, 251), 9)
+                background = bg(if (dark) Color.rgb(28, 35, 33) else Color.rgb(231, 240, 235), 9)
             }
             val iconView = ImageView(this).apply {
                 setImageResource(iconRes)
-                setColorFilter(if (dark) Color.rgb(126, 190, 255) else Color.rgb(38, 105, 180))
+                setColorFilter(if (dark) Color.rgb(105, 224, 190) else Color.rgb(30, 133, 101))
                 scaleType = ImageView.ScaleType.CENTER_INSIDE
                 setPadding(dp(5), dp(5), dp(5), dp(5))
             }
