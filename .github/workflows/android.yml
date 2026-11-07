@@ -10,6 +10,7 @@ on:
       - 'app/src/main/java/com/octopus/avr32studio/MainActivity.kt'
       - 'app/src/main/res/**'
       - 'docs/octoavr32a-logo.svg'
+      - 'docs/original-octopus-icon.svg'
       - 'README.md'
       - '.github/workflows/android.yml'
 
@@ -24,6 +25,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Generate launcher PNG from original SVG
+        run: |
+          python -m pip install --quiet cairosvg
+          mkdir -p app/src/main/res/drawable-nodpi
+          python - <<'PY'
+          import cairosvg
+          cairosvg.svg2png(
+              url="docs/original-octopus-icon.svg",
+              write_to="app/src/main/res/drawable-nodpi/ic_launcher_original.png",
+              output_width=512,
+              output_height=512,
+          )
+          print("Original SVG converted to Android launcher PNG.")
+          PY
+          test -s app/src/main/res/drawable-nodpi/ic_launcher_original.png
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
