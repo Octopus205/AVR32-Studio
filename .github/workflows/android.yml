@@ -104,6 +104,21 @@ jobs:
           cp /tmp/MightyCore-3.1.0/LICENSE* /tmp/octo-mightycore/ 2>/dev/null || true
           (cd /tmp/octo-mightycore && zip -qr "$GITHUB_WORKSPACE/app/src/main/assets/mightycore-v3.1.0.zip" .)
           test -s app/src/main/assets/mightycore-v3.1.0.zip
+      - name: Configure persistent APK signing
+        shell: bash
+        env:
+          OCTO_KEYSTORE_BASE64: ${{ secrets.OCTO_KEYSTORE_BASE64 }}
+          OCTO_KEYSTORE_PASSWORD: ${{ secrets.OCTO_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OCTO_KEYSTORE_BASE64:-}" ] || [ -z "${OCTO_KEYSTORE_PASSWORD:-}" ]; then
+            echo "::error::Add repository Actions secrets OCTO_KEYSTORE_BASE64 and OCTO_KEYSTORE_PASSWORD before building."
+            exit 1
+          fi
+          echo "$OCTO_KEYSTORE_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/app/octo-upload.jks"
+          test -s "$GITHUB_WORKSPACE/app/octo-upload.jks"
+          echo "OCTO_KEYSTORE_PATH=$GITHUB_WORKSPACE/app/octo-upload.jks" >> "$GITHUB_ENV"
+          echo "OCTO_KEYSTORE_PASSWORD=$OCTO_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
       - name: Upload APK
