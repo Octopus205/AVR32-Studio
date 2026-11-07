@@ -273,6 +273,7 @@ int main(void) {
                     Toast.makeText(this, "Source saved.", Toast.LENGTH_SHORT).show()
                 }
                 4102 -> {
+                    sourceExtension = if (uri.lastPathSegment?.substringAfterLast('.', "")?.equals("ino", true) == true) ".ino" else ".c"
                     val source = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
                     editor.setText(source)
                     Toast.makeText(this, "Source opened.", Toast.LENGTH_SHORT).show()
@@ -377,6 +378,8 @@ int main(void) {
             val q = ProcessBuilder(objcopy.absolutePath, "-O", "ihex", "-R", ".eeprom", elf.absolutePath, hex.absolutePath).redirectErrorStream(true).start()
             val conversion = q.inputStream.bufferedReader().readText()
             if (q.waitFor() != 0) { status.text = "●  HEX EXPORT FAILED"; status.setTextColor(Color.RED); log.text = messages + "\n" + conversion; return }
+            lastHexFile = hex
+            lastElfFile = elf
             status.text = "●  BUILD SUCCESS"; status.setTextColor(Color.rgb(46, 190, 130))
             log.text = "Firmware generated:\n${hex.absolutePath}\n${elf.absolutePath}\n\n$messages"
         } catch (e: Exception) { status.text = "●  BUILD ERROR"; status.setTextColor(Color.RED); log.text = e.toString() }
