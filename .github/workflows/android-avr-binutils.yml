@@ -55,10 +55,10 @@ jobs:
           file "$RUNNER_TEMP/avr-prefix/bin/avr-as"
           readelf -h "$RUNNER_TEMP/avr-prefix/bin/avr-as" | grep -E 'Class:|Machine:'
           mkdir -p "$GITHUB_WORKSPACE/output"
-          cp -R "$RUNNER_TEMP/avr-prefix/bin" "$GITHUB_WORKSPACE/output/"
+          cp -R "$RUNNER_TEMP/avr-prefix/." "$GITHUB_WORKSPACE/output/"
       - name: Upload Android ARMv7 AVR Binutils
         uses: actions/upload-artifact@v4
         with:
           name: avr-binutils-android-armv7-api26
-          path: output/bin/*
+          path: output/**
           if-no-files-found: error
