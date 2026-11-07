@@ -84,10 +84,10 @@ jobs:
           file "$RUNNER_TEMP/avr-gcc-prefix/bin/avr-gcc"
           readelf -h "$RUNNER_TEMP/avr-gcc-prefix/bin/avr-gcc" | grep -E 'Class:|Machine:'
           mkdir -p "$GITHUB_WORKSPACE/output"
-          cp -R "$RUNNER_TEMP/avr-gcc-prefix/bin" "$GITHUB_WORKSPACE/output/"
+          cp -R "$RUNNER_TEMP/avr-gcc-prefix/." "$GITHUB_WORKSPACE/output/"
       - name: Upload Android ARMv7 AVR GCC
         uses: actions/upload-artifact@v4
         with:
           name: avr-gcc-android-armv7-api26
-          path: output/bin/*
+          path: output/**
           if-no-files-found: error
