@@ -13,7 +13,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Install Arduino CLI
         shell: bash
         run: |
@@ -23,7 +22,6 @@ jobs:
           tar -xzf /tmp/arduino-cli.tar.gz -C "$HOME/bin" arduino-cli
           echo "$HOME/bin" >> "$GITHUB_PATH"
           "$HOME/bin/arduino-cli" version
-
       - name: Install MightyCore 3.1.0
         shell: bash
         run: |
@@ -32,7 +30,6 @@ jobs:
           arduino-cli core update-index --additional-urls https://mcudude.github.io/MightyCore/package_MCUdude_MightyCore_index.json
           arduino-cli core install MightyCore:avr@3.1.0 --additional-urls https://mcudude.github.io/MightyCore/package_MCUdude_MightyCore_index.json
           arduino-cli core list
-
       - name: Create ATmega32 Arduino test sketch
         shell: bash
         run: |
@@ -40,11 +37,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/OctoBlink"
           cat > "$RUNNER_TEMP/OctoBlink/OctoBlink.ino" <<'EOF'
           #define LED_PIN 0
-
           void setup() {
             pinMode(LED_PIN, OUTPUT);
           }
-
           void loop() {
             digitalWrite(LED_PIN, HIGH);
             delay(500);
@@ -52,7 +47,6 @@ jobs:
             delay(500);
           }
           EOF
-
       - name: Compile for ATmega32 at 8 MHz
         shell: bash
         run: |
@@ -61,12 +55,11 @@ jobs:
             --fqbn MightyCore:avr:32:clock=8MHz_internal \
             --build-path "$RUNNER_TEMP/octo-build" \
             "$RUNNER_TEMP/OctoBlink"
-          test -s "$RUNNER_TEMP/octo-build/OctoBlink.elf"
-          test -s "$RUNNER_TEMP/octo-build/OctoBlink.hex"
+          test -s "$RUNNER_TEMP/octo-build/OctoBlink.ino.elf"
+          test -s "$RUNNER_TEMP/octo-build/OctoBlink.ino.hex"
           mkdir -p output
-          cp "$RUNNER_TEMP/octo-build/OctoBlink.elf" output/ATmega32-8MHz.elf
-          cp "$RUNNER_TEMP/octo-build/OctoBlink.hex" output/ATmega32-8MHz.hex
-
+          cp "$RUNNER_TEMP/octo-build/OctoBlink.ino.elf" output/ATmega32-8MHz.elf
+          cp "$RUNNER_TEMP/octo-build/OctoBlink.ino.hex" output/ATmega32-8MHz.hex
       - name: Upload verified Arduino outputs
         uses: actions/upload-artifact@v4
         with:
