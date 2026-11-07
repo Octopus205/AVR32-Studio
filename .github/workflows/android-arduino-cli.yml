@@ -14,6 +14,13 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.x'
+      - name: Install Android NDK r26d
+        shell: bash
+        run: |
+          set -euo pipefail
+          wget --quiet https://dl.google.com/android/repository/android-ndk-r26d-linux.zip -O "$RUNNER_TEMP/ndk.zip"
+          unzip -q "$RUNNER_TEMP/ndk.zip" -d "$RUNNER_TEMP"
+          echo "NDK=$RUNNER_TEMP/android-ndk-r26d" >> "$GITHUB_ENV"
       - name: Checkout Arduino CLI source
         uses: actions/checkout@v4
         with:
@@ -25,10 +32,14 @@ jobs:
         run: |
           set -euo pipefail
           cd arduino-cli-src
+          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
+          export PATH="$TOOLCHAIN/bin:$PATH"
           export GOOS=android
           export GOARCH=arm
           export GOARM=7
-          export CGO_ENABLED=0
+          export CGO_ENABLED=1
+          export CC="$TOOLCHAIN/bin/armv7a-linux-androideabi26-clang"
+          export CXX="$TOOLCHAIN/bin/armv7a-linux-androideabi26-clang++"
           go build -trimpath -ldflags="-s -w" -o "$GITHUB_WORKSPACE/arduino-cli-armv7" .
           file "$GITHUB_WORKSPACE/arduino-cli-armv7"
           readelf -h "$GITHUB_WORKSPACE/arduino-cli-armv7" | grep -E 'Class:|Machine:'
