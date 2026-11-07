@@ -70,6 +70,7 @@ jobs:
           file "$RUNNER_TEMP/avr-gcc-prefix/bin/avr-gcc"
           readelf -h "$RUNNER_TEMP/avr-gcc-prefix/bin/avr-gcc" | grep -E 'Class:|Machine:'
           test -x "$RUNNER_TEMP/avr-gcc-prefix/libexec/gcc/avr/7.3.0/cc1"
+          test -s "$RUNNER_TEMP/avr-gcc-prefix/libexec/gcc/avr/7.3.0/liblto_plugin.so"
           test -s "$RUNNER_TEMP/avr-gcc-prefix/lib/gcc/avr/7.3.0/avr5/libgcc.a"
           # ATmega32 and ATmega32A are avr5 devices; discard unused MCU multilibs.
           MULTILIB="$RUNNER_TEMP/avr-gcc-prefix/lib/gcc/avr/7.3.0"
