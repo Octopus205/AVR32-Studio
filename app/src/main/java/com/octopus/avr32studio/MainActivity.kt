@@ -16,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import java.io.File
+import java.util.zip.ZipInputStream
 
 class MainActivity : Activity() {
     private lateinit var root: LinearLayout
@@ -45,6 +46,48 @@ int main(void) {
         super.onCreate(savedInstanceState)
         dark = getPreferences(0).getBoolean("dark_theme", true)
         buildUi()
+        installMightyCoreSources()
+    }
+
+
+    // Installs the pinned MightyCore source package bundled by the APK workflow.
+    // This is the Arduino board/core source layer; it is not the AVR-GCC compiler.
+    private fun installMightyCoreSources() {
+        val destination = File(filesDir, "arduino/mightycore")
+        val marker = File(destination, ".octo-installed-v3.1.0")
+        if (marker.isFile) return
+        try {
+            destination.deleteRecursively()
+            destination.mkdirs()
+            val archive = File(cacheDir, "mightycore-v3.1.0.zip")
+            assets.open("mightycore-v3.1.0.zip").use { input ->
+                archive.outputStream().use { output -> input.copyTo(output) }
+            }
+            val root = destination.canonicalFile
+            ZipInputStream(archive.inputStream().buffered()).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    val out = File(destination, entry.name).canonicalFile
+                    if (out.path != root.path && !out.path.startsWith(root.path + File.separator)) {
+                        throw SecurityException("Invalid MightyCore archive path")
+                    }
+                    if (entry.isDirectory) out.mkdirs() else {
+                        out.parentFile?.mkdirs()
+                        out.outputStream().use { output -> zip.copyTo(output) }
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+            archive.delete()
+            if (!File(destination, "avr/boards.txt").isFile) {
+                throw IllegalStateException("MightyCore board definitions are missing")
+            }
+            marker.writeText("MightyCore v3.1.0 source package")
+        } catch (e: Exception) {
+            destination.deleteRecursively()
+            android.util.Log.e("OctoAVR32A", "MightyCore source installation failed", e)
+        }
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
