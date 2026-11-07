@@ -1,0 +1,66 @@
+name: Apply original OctoAVR32A icon
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/file_00000000912c820aac3adba59a5fed33.png'
+      - '.github/workflows/apply-original-icon.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  crop-and-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Crop the center tile from the uploaded 3x3 sheet
+        run: |
+          python -m pip install --quiet Pillow
+          python - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          src = Path("docs/file_00000000912c820aac3adba59a5fed33.png")
+          im = Image.open(src).convert("RGBA")
+          w, h = im.size
+          if w < 300 or h < 300:
+              raise SystemExit(f"Image unexpectedly small: {w}x{h}")
+          # The user explicitly selected tile 5 (center) in a 3x3 grid.
+          left, top = w // 3, h // 3
+          right, bottom = (2*w) // 3, (2*h) // 3
+          tile = im.crop((left, top, right, bottom))
+          # Keep the original artwork; only resize to a launcher-friendly square canvas.
+          side = min(tile.size)
+          x = (tile.width - side) // 2
+          y = (tile.height - side) // 2
+          tile = tile.crop((x, y, x + side, y + side))
+          tile = tile.resize((512, 512), Image.Resampling.LANCZOS)
+          out = Path("app/src/main/res/drawable-nodpi/ic_launcher_original.png")
+          out.parent.mkdir(parents=True, exist_ok=True)
+          tile.save(out, format="PNG", optimize=True)
+          print(f"Source: {w}x{h}; center tile: {right-left}x{bottom-top}; output: {out} {tile.size}")
+          PY
+      - name: Point Android launcher to the original artwork
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+          s = s.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/ic_launcher_original"')
+          s = s.replace('android:roundIcon="@mipmap/ic_launcher"', 'android:roundIcon="@drawable/ic_launcher_original"')
+          p.write_text(s)
+          PY
+      - name: Commit generated icon and manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/res/drawable-nodpi/ic_launcher_original.png app/src/main/AndroidManifest.xml
+          if git diff --cached --quiet; then
+            echo "No icon changes to commit."
+          else
+            git commit -m "Use original center OctoAVR32A icon artwork"
+            git push
+          fi
