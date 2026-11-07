@@ -99,7 +99,9 @@ int main(void) {
             File(destination, "bin/avr-gcc").canExecute() &&
             File(destination, "bin/avr-objcopy").canExecute() &&
             File(destination, "lib/libc++_shared.so").isFile &&
-            File(destination, "libexec/gcc/avr/7.3.0/liblto_plugin.so").isFile &&\n            File(destination, "bin/as").canExecute() &&\n            File(destination, "bin/ld").canExecute()) return
+            File(destination, "libexec/gcc/avr/7.3.0/liblto_plugin.so").isFile &&
+            File(destination, "bin/as").canExecute() &&
+            File(destination, "bin/ld").canExecute()) return
         try {
             destination.deleteRecursively()
             destination.mkdirs()
