@@ -312,7 +312,7 @@ int main(void) {
             setBackgroundColor(panel())
         }
         drawer.addView(label("OctoAVR32A", 21f, true, text()))
-        drawer.addView(label("PROJECT WORKSPACE", 9f, true, muted()).apply { setPadding(0, dp(4), 0, dp(18) })
+        drawer.addView(label("PROJECT WORKSPACE", 9f, true, muted()).apply { setPadding(0, dp(4), 0, dp(18)) })
         fun item(title: String, subtitle: String? = null, action: () -> Unit) {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
