@@ -76,6 +76,7 @@ jobs:
             --target=avr \
             --prefix="$RUNNER_TEMP/avr-gcc-prefix" \
             --with-gmp="$HOST_DEPS" --with-mpfr="$HOST_DEPS" --with-mpc="$HOST_DEPS" \
+            --with-gmp-include="$HOST_DEPS/include" --with-gmp-lib="$HOST_DEPS/lib" \
             --enable-languages=c,c++ --disable-nls --disable-bootstrap \
             --disable-libssp --disable-libcc1 --disable-shared --disable-threads \
             --disable-libstdcxx-pch --disable-libquadmath --disable-libgomp \
