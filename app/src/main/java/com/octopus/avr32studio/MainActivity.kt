@@ -435,40 +435,93 @@ int main(void) {
         }
     }
 
+    @Volatile private var buildInProgress = false
+
     private fun compile() {
-        val dir = File(filesDir, "projects/untitled").apply { mkdirs() }
-        val selectedName = if (sourceExtension == ".ino") "sketch.ino" else "main.c"
-        val source = File(dir, selectedName)
-        source.writeText(editor.text.toString())
-        if (sourceExtension == ".ino") {
-            status.text = "●  ARDUINO CORE REQUIRED"
-            status.setTextColor(Color.rgb(238, 165, 65))
-            log.text = "The .ino sketch was saved, but Arduino AVR Core and the sketch preprocessor are not integrated yet. Build is intentionally stopped to avoid treating an Arduino sketch as plain C."
+        if (buildInProgress) {
+            Toast.makeText(this, "Build is already running.", Toast.LENGTH_SHORT).show()
             return
         }
-        val gcc = File(filesDir, "toolchain/bin/avr-gcc")
-        val objcopy = File(filesDir, "toolchain/bin/avr-objcopy")
-        if (!gcc.isFile || !objcopy.isFile) {
-            status.text = "●  TOOLCHAIN MISSING"
-            status.setTextColor(Color.rgb(238, 165, 65))
-            log.text = "Source saved: ${source.absolutePath}\n\nAVR-GCC for Android ARM 32-bit is not integrated yet. No HEX or ELF was generated."
-            return
-        }
-        try {
-            val elf = File(dir, "firmware.elf")
-            val hex = File(dir, "firmware.hex")
-            val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
-            val toolchain = File(filesDir, "toolchain")
-            val p = avrProcessBuilder("-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/", "-B${File(toolchain, "bin").absolutePath}/", "-B${File(toolchain, "avr/lib").absolutePath}/", "-I${File(toolchain, "avr/include").absolutePath}", "-L${File(toolchain, "lib/gcc/avr/7.3.0").absolutePath}", "-L${File(toolchain, "avr/lib").absolutePath}", "-mmcu=$mcu", "-DF_CPU=8000000UL", "-Os", "-std=gnu11", source.absolutePath, "-o", elf.absolutePath).redirectErrorStream(true).start()
-            val messages = p.inputStream.bufferedReader().readText()
-            if (p.waitFor() != 0) { status.text = "●  BUILD FAILED"; status.setTextColor(Color.RED); log.text = messages; return }
-            val q = ProcessBuilder(objcopy.absolutePath, "-O", "ihex", "-R", ".eeprom", elf.absolutePath, hex.absolutePath).redirectErrorStream(true).start()
-            val conversion = q.inputStream.bufferedReader().readText()
-            if (q.waitFor() != 0) { status.text = "●  HEX EXPORT FAILED"; status.setTextColor(Color.RED); log.text = messages + "\n" + conversion; return }
-            lastHexFile = hex
-            lastElfFile = elf
-            status.text = "●  BUILD SUCCESS"; status.setTextColor(Color.rgb(46, 190, 130))
-            log.text = "Firmware generated:\n${hex.absolutePath}\n${elf.absolutePath}\n\n$messages"
-        } catch (e: Exception) { status.text = "●  BUILD ERROR"; status.setTextColor(Color.RED); log.text = e.toString() }
+        buildInProgress = true
+        status.text = "●  BUILD RUNNING"
+        status.setTextColor(accent())
+        log.text = "Preparing compiler...\\nPlease wait. You can keep the app open."
+
+        Thread {
+            fun publish(state: String, color: Int, message: String) {
+                runOnUiThread {
+                    status.text = state
+                    status.setTextColor(color)
+                    log.text = message
+                    buildInProgress = false
+                }
+            }
+
+            try {
+                val dir = File(filesDir, "projects/untitled").apply { mkdirs() }
+                val selectedName = if (sourceExtension == ".ino") "sketch.ino" else "main.c"
+                val source = File(dir, selectedName)
+                val sourceText = editor.text.toString()
+                source.writeText(sourceText)
+
+                if (sourceExtension == ".ino") {
+                    publish("●  ARDUINO CORE REQUIRED", Color.rgb(238, 165, 65),
+                        "The .ino sketch was saved, but Arduino AVR Core and the sketch preprocessor are not integrated yet. Build is intentionally stopped.")
+                    return@Thread
+                }
+
+                val gcc = File(filesDir, "toolchain/bin/avr-gcc")
+                val objcopy = File(filesDir, "toolchain/bin/avr-objcopy")
+                if (!gcc.isFile || !objcopy.isFile) {
+                    publish("●  TOOLCHAIN MISSING", Color.rgb(238, 165, 65),
+                        "Source saved: ${source.absolutePath}\\n\\nAVR-GCC for Android ARM 32-bit is not integrated yet. No HEX or ELF was generated.")
+                    return@Thread
+                }
+
+                val elf = File(dir, "firmware.elf")
+                val hex = File(dir, "firmware.hex")
+                val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
+                val toolchain = File(filesDir, "toolchain")
+                runOnUiThread { log.text = "Compiling and linking AVR firmware...\\nThis may take a little while." }
+
+                val p = avrProcessBuilder(
+                    "-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/",
+                    "-B${File(toolchain, "bin").absolutePath}/",
+                    "-B${File(toolchain, "avr/lib").absolutePath}/",
+                    "-I${File(toolchain, "avr/include").absolutePath}",
+                    "-L${File(toolchain, "lib/gcc/avr/7.3.0").absolutePath}",
+                    "-L${File(toolchain, "avr/lib").absolutePath}",
+                    "-mmcu=$mcu", "-DF_CPU=8000000UL", "-Os", "-std=gnu11",
+                    source.absolutePath, "-o", elf.absolutePath
+                ).redirectErrorStream(true).start()
+                val messages = p.inputStream.bufferedReader().use { it.readText() }
+                val compileExit = p.waitFor()
+                if (compileExit != 0) {
+                    publish("●  BUILD FAILED", Color.RED, messages.ifBlank { "avr-gcc failed with exit code $compileExit" })
+                    return@Thread
+                }
+
+                runOnUiThread { log.text = "Generating Intel HEX file..." }
+                val q = ProcessBuilder(objcopy.absolutePath, "-O", "ihex", "-R", ".eeprom",
+                    elf.absolutePath, hex.absolutePath).redirectErrorStream(true).start()
+                val conversion = q.inputStream.bufferedReader().use { it.readText() }
+                val objcopyExit = q.waitFor()
+                if (objcopyExit != 0) {
+                    publish("●  HEX EXPORT FAILED", Color.RED, messages + "\\n" + conversion)
+                    return@Thread
+                }
+                if (!elf.isFile || elf.length() == 0L || !hex.isFile || hex.length() == 0L) {
+                    publish("●  BUILD FAILED", Color.RED, "Compiler finished but HEX/ELF output is missing or empty.\\n" + messages)
+                    return@Thread
+                }
+
+                lastHexFile = hex
+                lastElfFile = elf
+                publish("●  BUILD SUCCESS", Color.rgb(46, 190, 130),
+                    "Firmware generated:\\n${hex.absolutePath}\\n${elf.absolutePath}\\n\\n$messages")
+            } catch (e: Exception) {
+                publish("●  BUILD ERROR", Color.RED, e.toString())
+            }
+        }.start()
     }
 }
