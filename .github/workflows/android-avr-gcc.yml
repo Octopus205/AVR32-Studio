@@ -77,6 +77,10 @@ jobs:
           du -sh "$RUNNER_TEMP/avr-gcc-prefix"
           file "$RUNNER_TEMP/avr-gcc-prefix/libexec/gcc/avr/7.3.0/cc1"
           readelf -h "$RUNNER_TEMP/avr-gcc-prefix/libexec/gcc/avr/7.3.0/cc1" | grep -E "Class:|Machine:"
+          # Bundle the Android NDK C++ shared runtime required by NDK-linked GCC executables.
+          mkdir -p "$RUNNER_TEMP/avr-gcc-prefix/lib"
+          test -s "$TOOLCHAIN/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so"
+          cp "$TOOLCHAIN/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so" "$RUNNER_TEMP/avr-gcc-prefix/lib/libc++_shared.so"
           mkdir -p "$GITHUB_WORKSPACE/output"
           cp -R "$RUNNER_TEMP/avr-gcc-prefix/." "$GITHUB_WORKSPACE/output/"
       - name: Upload Android ARMv7 AVR GCC
