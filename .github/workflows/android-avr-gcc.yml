@@ -1,5 +1,5 @@
 name: Build AVR-GCC for Android ARMv7
-# Rebuild trigger: Kotlin syntax correction for v4 toolchain validation.
+# Rebuild trigger: regenerate the ARMv7 AVR-GCC artifact for the current IDE release.
 on:
   workflow_dispatch:
   push:
