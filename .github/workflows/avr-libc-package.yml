@@ -1,0 +1,41 @@
+name: Prepare AVR Libc runtime files
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/avr-libc-package.yml'
+
+jobs:
+  package-avr-libc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install AVR toolchain packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y avr-libc gcc-avr binutils-avr
+      - name: Collect AVR Libc headers and libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p package/include package/lib
+          cp -R /usr/lib/avr/include/. package/include/
+          find /usr/lib/avr/lib -type f -name '*.a' -exec cp --parents {} package/ \;
+          test -s package/include/avr/io.h
+          test -n "$(find package -name 'libc.a' -o -name 'libm.a')"
+          avr-gcc --version
+          avr-gcc -mmcu=atmega32 -x c -c -o /tmp/avr-libc-check.o - <<'EOF'
+          #include <avr/io.h>
+          #include <util/delay.h>
+          #define F_CPU 8000000UL
+          int main(void) { DDRB |= _BV(PB0); _delay_ms(1); return 0; }
+          EOF
+          mkdir -p output
+          cp -R package/. output/
+          tar -czf output/avr-libc-runtime.tar.gz -C output include lib
+      - name: Upload AVR Libc runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: avr-libc-runtime
+          path: output/avr-libc-runtime.tar.gz
+          if-no-files-found: error
