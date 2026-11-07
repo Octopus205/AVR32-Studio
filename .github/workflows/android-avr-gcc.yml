@@ -65,6 +65,9 @@ jobs:
           export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
           export CFLAGS="-O2 -fPIC"
           export CXXFLAGS="-O2 -fPIC"
+          export CPPFLAGS="-I$HOST_DEPS/include"
+          export LDFLAGS="-L$HOST_DEPS/lib"
+          export LIBS="-lmpc -lmpfr -lgmp -lm"
           mkdir -p "$RUNNER_TEMP/build-gcc" "$RUNNER_TEMP/avr-gcc-prefix"
           cd "$RUNNER_TEMP/build-gcc"
           "$RUNNER_TEMP/gcc-7.3.0/configure" \
