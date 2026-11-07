@@ -151,9 +151,15 @@ int main(void) {
         }
     }
 
-    private fun avrProcessBuilder(vararg args: String): ProcessBuilder {
+    private fun avrProcessBuilder(vararg args: String): ProcessBuilder =
+        avrToolProcessBuilder(File(filesDir, "toolchain/bin/avr-gcc"), *args)
+
+    private fun avrObjcopyProcessBuilder(vararg args: String): ProcessBuilder =
+        avrToolProcessBuilder(File(filesDir, "toolchain/bin/avr-objcopy"), *args)
+
+    private fun avrToolProcessBuilder(executable: File, vararg args: String): ProcessBuilder {
         val toolchain = File(filesDir, "toolchain")
-        val command = arrayListOf(File(toolchain, "bin/avr-gcc").absolutePath)
+        val command = arrayListOf(executable.absolutePath)
         command.addAll(args)
         val workDir = File(filesDir, "compiler-work").apply { mkdirs() }
         return ProcessBuilder(command).apply {
@@ -590,9 +596,10 @@ int main(void) {
                 val libraryPath = File(toolchain, "avr/lib").absolutePath
                 val gccLibraryPath = File(toolchain, "lib/gcc/avr/7.3.0").absolutePath
 
-                fun runBuildStage(label: String, args: List<String>, timeoutSeconds: Long, outputFile: File): Pair<Int?, String> {
+                fun runBuildStage(label: String, args: List<String>, timeoutSeconds: Long, outputFile: File, useObjcopy: Boolean = false): Pair<Int?, String> {
                     runOnUiThread { log.text = "$label\\nPlease wait..." }
-                    val process = avrProcessBuilder(*args.toTypedArray())
+                    val builder = if (useObjcopy) avrObjcopyProcessBuilder(*args.toTypedArray()) else avrProcessBuilder(*args.toTypedArray())
+                    val process = builder
                         .redirectErrorStream(true)
                         .redirectOutput(outputFile)
                         .start()
@@ -650,7 +657,8 @@ int main(void) {
                     listOf(objcopy.absolutePath, "-O", "ihex", "-R", ".eeprom",
                         elf.absolutePath, hex.absolutePath),
                     30L,
-                    objcopyOutput
+                    objcopyOutput,
+                    useObjcopy = true
                 )
                 if (objcopyStage.first != 0) {
                     publish(if (objcopyStage.first == null) "●  HEX EXPORT TIMEOUT" else "●  HEX EXPORT FAILED",
