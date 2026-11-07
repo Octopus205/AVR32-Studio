@@ -11,6 +11,7 @@ import android.text.Editable
 import android.text.Spannable
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
+import android.text.style.BackgroundColorSpan
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -28,7 +29,12 @@ class MainActivity : Activity() {
     private lateinit var clock: Spinner
     private lateinit var outputCard: LinearLayout
     private lateinit var statusBar: TextView
+    private lateinit var tabsBar: LinearLayout
+    private lateinit var filenameLabel: TextView
     private var dark = true
+    private data class SourceTab(var name: String, var content: String, var extension: String)
+    private val sourceTabs = mutableListOf<SourceTab>()
+    private var currentTabIndex = 0
     private var consoleExpanded = false
     private var lastHexFile: File? = null
     private var lastElfFile: File? = null
@@ -48,6 +54,8 @@ int main(void) {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dark = getSharedPreferences("octo_settings", MODE_PRIVATE).getBoolean("dark", true)
+        sourceTabs.clear()
+        sourceTabs.add(SourceTab("main.c", codeSample, ".c"))
         buildUi()
         installAvrToolchain()
         installMightyCoreSources()
@@ -189,6 +197,11 @@ int main(void) {
     private fun text() = if (dark) Color.rgb(213, 222, 234) else Color.rgb(28, 42, 61)
     private fun muted() = if (dark) Color.rgb(143, 163, 188) else Color.rgb(105, 120, 140)
     private fun accent() = Color.rgb(59, 130, 246)
+    private fun clockDefine(source: String, hz: Long = selectedClockHz()): String {
+        val definition = "#define F_CPU ${hz}UL"
+        val pattern = Regex("(?m)^\\s*#\\s*define\\s+F_CPU\\s+[^\\r\\n]+")
+        return if (pattern.containsMatchIn(source)) pattern.replace(source, definition) else definition + "\\n" + source
+    }
     private fun selectedClockHz(): Long = when (clock.selectedItem?.toString()) {
         "1 MHz" -> 1000000L
         "4 MHz" -> 4000000L
@@ -257,11 +270,15 @@ int main(void) {
 
         val editorHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         editorHeader.addView(label("EDITOR", 10f, true, muted()), LinearLayout.LayoutParams(0, dp(30), 1f))
-        editorHeader.addView(label(if (sourceExtension == ".ino") "sketch.ino" else "main.c", 11f, true, accent()).apply {
+        filenameLabel = label(sourceTabs[currentTabIndex].name, 11f, true, accent()).apply {
             setPadding(dp(10), dp(5), dp(10), dp(5))
-            background = bg(if (dark) Color.rgb(13, 52, 86) else Color.rgb(225, 242, 255), 8)
-        })
+            background = bg(if (dark) Color.rgb(31, 54, 82) else Color.rgb(229, 239, 252), 8)
+        }
+        editorHeader.addView(filenameLabel)
         root.addView(editorHeader, marginTop(4))
+        tabsBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        root.addView(tabsBar, marginTop(2))
+        renderTabs()
 
         // The editor occupies the available screen height and scrolls internally.
         val editorCard = card().apply { orientation = LinearLayout.HORIZONTAL }
@@ -288,7 +305,7 @@ int main(void) {
             isVerticalScrollBarEnabled = true
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
             setHorizontallyScrolling(true)
-            setText(codeSample)
+            setText(sourceTabs[currentTabIndex].content)
         }
         editorCard.addView(editor, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         editor.setOnScrollChangeListener { _, _, scrollY, _, _ -> gutter.scrollTo(0, scrollY) }
@@ -297,8 +314,9 @@ int main(void) {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val lines = (s?.count { it == '\n' } ?: 0) + 1
                 gutter.text = (1..lines).joinToString("\n")
+                sourceTabs.getOrNull(currentTabIndex)?.content = s?.toString() ?: ""
             }
-            override fun afterTextChanged(s: Editable?) { highlight(s) }
+            override fun afterTextChanged(s: Editable?) { highlight(s); refreshStatusBar() }
         })
         root.addView(editorCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
@@ -325,6 +343,48 @@ int main(void) {
         setContentView(root)
         refreshStatusBar()
         highlight(editor.text)
+    }
+
+    private fun renderTabs() {
+        if (!::tabsBar.isInitialized) return
+        tabsBar.removeAllViews()
+        sourceTabs.forEachIndexed { index, tab ->
+            val button = TextView(this).apply {
+                text = tab.name
+                textSize = 11f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(if (index == currentTabIndex) accent() else muted())
+                setPadding(dp(12), dp(7), dp(12), dp(7))
+                background = bg(if (index == currentTabIndex) panel() else page(), 8)
+                setOnClickListener {
+                    sourceTabs.getOrNull(currentTabIndex)?.content = editor.text.toString()
+                    currentTabIndex = index
+                    sourceExtension = sourceTabs[index].extension
+                    editor.setText(sourceTabs[index].content)
+                    filenameLabel.text = sourceTabs[index].name
+                    renderTabs()
+                    refreshStatusBar()
+                }
+            }
+            tabsBar.addView(button, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)).apply { rightMargin = dp(4) })
+        }
+        val add = TextView(this).apply {
+            text = "+"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(accent())
+            contentDescription = "Open source in new tab"
+            setOnClickListener { openSource() }
+        }
+        tabsBar.addView(add, LinearLayout.LayoutParams(dp(36), dp(34)))
+    }
+
+    private fun addSourceTab(name: String, content: String, extension: String) {
+        sourceTabs.getOrNull(currentTabIndex)?.content = editor.text.toString()
+        sourceTabs.add(SourceTab(name, content, extension))
+        currentTabIndex = sourceTabs.lastIndex
+        sourceExtension = extension
+        editor.setText(content)
+        filenameLabel.text = name
+        renderTabs()
+        refreshStatusBar()
     }
 
     private fun toggleConsole() {
@@ -382,12 +442,18 @@ int main(void) {
         item("Console", "Open the full console page") { popup.dismiss(); showConsolePage() }
         item("Export HEX", "Export Intel HEX") { popup.dismiss(); exportArtifact(lastHexFile, "application/octet-stream", "firmware.hex") }
         item("Export ELF", "Export ELF file") { popup.dismiss(); exportArtifact(lastElfFile, "application/octet-stream", "firmware.elf") }
-        item("Settings", "Target clock: 8 MHz · MCU: ATmega32 family") {
+        item("Settings", "Appearance: Dark Navy / Light") {
             popup.dismiss()
             android.app.AlertDialog.Builder(this)
-                .setTitle("Settings")
-                .setMessage("Target devices: ATmega32A and ATmega32 only.\nCPU frequency: 8 MHz.\nAppearance: follows Android system theme.")
-                .setPositiveButton("OK", null).show()
+                .setTitle("Appearance")
+                .setSingleChoiceItems(arrayOf("Dark Navy", "Light"), if (dark) 0 else 1) { dialog, which ->
+                    sourceTabs.getOrNull(currentTabIndex)?.content = editor.text.toString()
+                    dark = which == 0
+                    getSharedPreferences("octo_settings", MODE_PRIVATE).edit().putBoolean("dark", dark).apply()
+                    dialog.dismiss()
+                    buildUi()
+                }
+                .setNegativeButton("Close", null).show()
         }
         item("About", "AVR compiler for Android") {
             popup.dismiss()
@@ -499,8 +565,10 @@ int main(void) {
                 4102 -> {
                     sourceExtension = if (uri.lastPathSegment?.substringAfterLast('.', "")?.equals("ino", true) == true) ".ino" else ".c"
                     val source = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
-                    editor.setText(source)
-                    Toast.makeText(this, "Source opened.", Toast.LENGTH_SHORT).show()
+                    val fileName = uri.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':') ?: "source.c"
+                    val extension = if (fileName.substringAfterLast('.', "").equals("ino", true)) ".ino" else ".c"
+                    addSourceTab(fileName, source, extension)
+                    Toast.makeText(this, "Source opened in a new tab.", Toast.LENGTH_SHORT).show()
                 }
                 4103 -> copyArtifact(uri, lastHexFile)
                 4104 -> copyArtifact(uri, lastElfFile)
@@ -532,10 +600,11 @@ int main(void) {
         }
         val dir = File(filesDir, "projects/verify").apply { mkdirs() }
         val source = File(dir, "verify.c")
-        source.writeText(editor.text.toString())
+        val selectedHz = selectedClockHz()
+        source.writeText(clockDefine(editor.text.toString(), selectedHz))
         try {
             val toolchain = File(filesDir, "toolchain")
-            val process = avrProcessBuilder("-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/", "-I${File(toolchain, "avr/include").absolutePath}", "-mmcu=" + (if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"), "-DF_CPU=8000000UL", "-std=gnu11", "-Os", "-fsyntax-only", source.absolutePath).redirectErrorStream(true).start()
+            val process = avrProcessBuilder("-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/", "-I${File(toolchain, "avr/include").absolutePath}", "-mmcu=" + (if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"), "-DF_CPU=${selectedHz}UL", "-std=gnu11", "-Os", "-fsyntax-only", source.absolutePath).redirectErrorStream(true).start()
             val output = process.inputStream.bufferedReader().readText()
             val code = process.waitFor()
             status.text = if (code == 0) "●  VERIFY PASSED" else "●  VERIFY FAILED"
@@ -562,7 +631,16 @@ int main(void) {
         if (editable == null) return
         val spans = editable.getSpans(0, editable.length, ForegroundColorSpan::class.java)
         spans.forEach { editable.removeSpan(it) }
+        val oldBackgrounds = editable.getSpans(0, editable.length, BackgroundColorSpan::class.java)
+        oldBackgrounds.forEach { editable.removeSpan(it) }
         val source = editable.toString()
+        if (source.isNotEmpty() && ::editor.isInitialized) {
+            val cursor = editor.selectionStart.coerceIn(0, source.length)
+            val lineStart = if (cursor == 0) 0 else source.lastIndexOf(\'\\n\', cursor - 1) + 1
+            val foundEnd = source.indexOf(\'\\n\', cursor)
+            val lineEnd = if (foundEnd < 0) source.length else foundEnd
+            if (lineEnd > lineStart) editable.setSpan(BackgroundColorSpan(if (dark) Color.rgb(31, 48, 70) else Color.rgb(235, 243, 253)), lineStart, lineEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
         val patterns = listOf(
             Pair("\\b(int|void|char|long|short|unsigned|volatile|const|return|while|for|if|else)\\b", Color.rgb(86, 174, 255)),
             Pair("\\b(#define|#include)\\b", Color.rgb(190, 140, 255)),
@@ -582,6 +660,7 @@ int main(void) {
             return
         }
         buildInProgress = true
+        val selectedHz = selectedClockHz()
         status.text = "●  BUILD RUNNING"
         status.setTextColor(accent())
         log.text = "Preparing compiler...\\nPlease wait. You can keep the app open."
@@ -591,6 +670,7 @@ int main(void) {
                 runOnUiThread {
                     status.text = state
                     status.setTextColor(color)
+                    statusBar.text = "$state  ·  ${selectedHz/1000000} MHz"
                     log.text = message
                     buildInProgress = false
                 }
@@ -598,9 +678,9 @@ int main(void) {
 
             try {
                 val dir = File(filesDir, "projects/untitled").apply { mkdirs() }
-                val selectedName = if (sourceExtension == ".ino") "sketch.ino" else "main.c"
-                val source = File(dir, selectedName)
-                val sourceText = editor.text.toString()
+                val selectedName = sourceTabs.getOrNull(currentTabIndex)?.name ?: if (sourceExtension == ".ino") "sketch.ino" else "main.c"
+                val source = File(dir, selectedName.replace(Regex("[^A-Za-z0-9_.-]"), "_"))
+                val sourceText = clockDefine(editor.text.toString(), selectedHz)
                 source.writeText(sourceText)
 
                 if (sourceExtension == ".ino") {
@@ -658,7 +738,7 @@ int main(void) {
                     "-I$includePath",
                     "-L$gccLibraryPath",
                     "-L$libraryPath",
-                    "-mmcu=$mcu", "-DF_CPU=8000000UL", "-O0", "-fno-lto", "-std=gnu11"
+                    "-mmcu=$mcu", "-DF_CPU=${selectedHz}UL", "-O0", "-fno-lto", "-std=gnu11"
                 )
 
                 val compileStage = runBuildStage(
