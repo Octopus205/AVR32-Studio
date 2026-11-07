@@ -200,7 +200,7 @@ int main(void) {
     private fun clockDefine(source: String, hz: Long = selectedClockHz()): String {
         val definition = "#define F_CPU ${hz}UL"
         val pattern = Regex("(?m)^\\s*#\\s*define\\s+F_CPU\\s+[^\\r\\n]+")
-        return if (pattern.containsMatchIn(source)) pattern.replace(source, definition) else definition + "\\n" + source
+        return if (pattern.containsMatchIn(source)) pattern.replace(source, definition) else definition + "\n" + source
     }
     private fun selectedClockHz(): Long = when (clock.selectedItem?.toString()) {
         "1 MHz" -> 1000000L
