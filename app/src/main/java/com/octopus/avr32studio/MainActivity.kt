@@ -46,6 +46,7 @@ int main(void) {
         super.onCreate(savedInstanceState)
         dark = getPreferences(0).getBoolean("dark_theme", true)
         buildUi()
+        installAvrToolchain()
         installMightyCoreSources()
     }
 
@@ -87,6 +88,72 @@ int main(void) {
         } catch (e: Exception) {
             destination.deleteRecursively()
             android.util.Log.e("OctoAVR32A", "MightyCore source installation failed", e)
+        }
+    }
+
+    // Extracts the offline ARMv7 AVR toolchain from the APK assets.
+    private fun installAvrToolchain() {
+        val destination = File(filesDir, "toolchain")
+        val marker = File(destination, ".octo-toolchain-installed")
+        if (marker.isFile && File(destination, "bin/avr-gcc").canExecute() &&
+            File(destination, "bin/avr-objcopy").canExecute()) return
+        try {
+            destination.deleteRecursively()
+            destination.mkdirs()
+            val archive = File(cacheDir, "avr-toolchain-armv7.zip")
+            assets.open("avr-toolchain-armv7.zip").use { input ->
+                archive.outputStream().use { output -> input.copyTo(output) }
+            }
+            val root = destination.canonicalFile
+            ZipInputStream(archive.inputStream().buffered()).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    val relative = entry.name.removePrefix("toolchain/")
+                    if (relative.isNotEmpty()) {
+                        val out = File(destination, relative).canonicalFile
+                        if (out.path != root.path && !out.path.startsWith(root.path + File.separator)) {
+                            throw SecurityException("Invalid AVR toolchain archive path")
+                        }
+                        if (entry.isDirectory) out.mkdirs() else {
+                            out.parentFile?.mkdirs()
+                            out.outputStream().use { output -> zip.copyTo(output) }
+                            if (relative.startsWith("bin/") || relative.startsWith("libexec/")) {
+                                out.setExecutable(true, false)
+                            }
+                        }
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+            archive.delete()
+            val gcc = File(destination, "bin/avr-gcc")
+            val objcopy = File(destination, "bin/avr-objcopy")
+            val cc1 = File(destination, "libexec/gcc/avr/7.3.0/cc1")
+            if (!gcc.isFile || !objcopy.isFile || !cc1.isFile ||
+                !File(destination, "avr/include/avr/io.h").isFile) {
+                throw IllegalStateException("AVR compiler package is incomplete")
+            }
+            gcc.setExecutable(true, false)
+            objcopy.setExecutable(true, false)
+            cc1.setExecutable(true, false)
+            marker.writeText("Octo AVR ARMv7 toolchain package")
+            log.text = "AVR toolchain installed. Compiler runtime checks will run when Verify/Build is selected."
+        } catch (e: Exception) {
+            destination.deleteRecursively()
+            android.util.Log.e("OctoAVR32A", "AVR toolchain installation failed", e)
+            log.text = "AVR toolchain installation failed: ${e.message}"
+        }
+    }
+
+    private fun avrProcessBuilder(vararg args: String): ProcessBuilder {
+        val toolchain = File(filesDir, "toolchain")
+        val command = arrayListOf(File(toolchain, "bin/avr-gcc").absolutePath)
+        command.addAll(args)
+        return ProcessBuilder(command).apply {
+            environment()["GCC_EXEC_PREFIX"] = File(toolchain, "lib/gcc/").absolutePath + File.separator
+            environment()["COMPILER_PATH"] = File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath
+            environment()["LIBRARY_PATH"] = File(toolchain, "avr/lib").absolutePath
         }
     }
 
@@ -310,7 +377,8 @@ int main(void) {
         val source = File(dir, "verify.c")
         source.writeText(editor.text.toString())
         try {
-            val process = ProcessBuilder(gcc.absolutePath, "-mmcu=" + (if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"), "-DF_CPU=8000000UL", "-std=gnu11", "-fsyntax-only", source.absolutePath).redirectErrorStream(true).start()
+            val toolchain = File(filesDir, "toolchain")
+            val process = avrProcessBuilder("-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/", "-I${File(toolchain, "avr/include").absolutePath}", "-mmcu=" + (if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"), "-DF_CPU=8000000UL", "-std=gnu11", "-fsyntax-only", source.absolutePath).redirectErrorStream(true).start()
             val output = process.inputStream.bufferedReader().readText()
             val code = process.waitFor()
             status.text = if (code == 0) "●  VERIFY PASSED" else "●  VERIFY FAILED"
@@ -372,7 +440,8 @@ int main(void) {
             val elf = File(dir, "firmware.elf")
             val hex = File(dir, "firmware.hex")
             val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
-            val p = ProcessBuilder(gcc.absolutePath, "-mmcu=$mcu", "-DF_CPU=8000000UL", "-Os", "-std=gnu11", source.absolutePath, "-o", elf.absolutePath).redirectErrorStream(true).start()
+            val toolchain = File(filesDir, "toolchain")
+            val p = avrProcessBuilder("-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/", "-I${File(toolchain, "avr/include").absolutePath}", "-L${File(toolchain, "avr/lib").absolutePath}", "-mmcu=$mcu", "-DF_CPU=8000000UL", "-Os", "-std=gnu11", source.absolutePath, "-o", elf.absolutePath).redirectErrorStream(true).start()
             val messages = p.inputStream.bufferedReader().readText()
             if (p.waitFor() != 0) { status.text = "●  BUILD FAILED"; status.setTextColor(Color.RED); log.text = messages; return }
             val q = ProcessBuilder(objcopy.absolutePath, "-O", "ihex", "-R", ".eeprom", elf.absolutePath, hex.absolutePath).redirectErrorStream(true).start()
