@@ -29,30 +29,6 @@ jobs:
           tar -xf "$RUNNER_TEMP/gcc.tar.xz" -C "$RUNNER_TEMP"
           cd "$RUNNER_TEMP/gcc-7.3.0"
           ./contrib/download_prerequisites
-      - name: Build Android ARMv7 host libraries
-        shell: bash
-        run: |
-          set -euo pipefail
-          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
-          export PATH="$TOOLCHAIN/bin:$PATH"
-          export CC="$TOOLCHAIN/bin/armv7a-linux-androideabi26-clang"
-          export CFLAGS="-O2 -fPIC"
-          PREFIX="$RUNNER_TEMP/android-host-deps"
-          mkdir -p "$PREFIX"
-          cd "$RUNNER_TEMP/gcc-7.3.0"
-          cd gmp
-          ./configure --host=arm-linux-androideabi --prefix="$PREFIX" --disable-shared --enable-static --disable-assembly
-          make -j2
-          make install
-          cd "$RUNNER_TEMP/gcc-7.3.0/mpfr"
-          ./configure --host=arm-linux-androideabi --prefix="$PREFIX" --with-gmp="$PREFIX" --disable-shared --enable-static
-          make -j2
-          make install
-          cd "$RUNNER_TEMP/gcc-7.3.0/mpc"
-          ./configure --host=arm-linux-androideabi --prefix="$PREFIX" --with-gmp="$PREFIX" --with-mpfr="$PREFIX" --disable-shared --enable-static
-          make -j2
-          make install
-          echo "HOST_DEPS=$PREFIX" >> "$GITHUB_ENV"
       - name: Configure and build AVR GCC driver for Android ARMv7
         shell: bash
         run: |
@@ -65,9 +41,6 @@ jobs:
           export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
           export CFLAGS="-O2 -fPIC"
           export CXXFLAGS="-O2 -fPIC"
-          export CPPFLAGS="-I$HOST_DEPS/include"
-          export LDFLAGS="-L$HOST_DEPS/lib"
-          export LIBS="-lmpc -lmpfr -lgmp -lm"
           mkdir -p "$RUNNER_TEMP/build-gcc" "$RUNNER_TEMP/avr-gcc-prefix"
           cd "$RUNNER_TEMP/build-gcc"
           "$RUNNER_TEMP/gcc-7.3.0/configure" \
@@ -75,8 +48,6 @@ jobs:
             --host=arm-linux-androideabi \
             --target=avr \
             --prefix="$RUNNER_TEMP/avr-gcc-prefix" \
-            --with-gmp="$HOST_DEPS" --with-mpfr="$HOST_DEPS" --with-mpc="$HOST_DEPS" \
-            --with-gmp-include="$HOST_DEPS/include" --with-gmp-lib="$HOST_DEPS/lib" \
             --enable-languages=c,c++ --disable-nls --disable-bootstrap \
             --disable-libssp --disable-libcc1 --disable-shared --disable-threads \
             --disable-libstdcxx-pch --disable-libquadmath --disable-libgomp \
