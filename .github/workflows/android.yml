@@ -58,6 +58,8 @@ jobs:
           echo "ASSEMBLY: libc unpacked"
           cp -R /tmp/avr-libc-unpacked/avr app/src/main/assets/toolchain/
           echo "ASSEMBLY: libc copied"
+          find app/src/main/assets/toolchain/bin app/src/main/assets/toolchain/libexec -type f -exec chmod 755 {} +
+          echo "ASSEMBLY: executable bits restored"
           ls -l app/src/main/assets/toolchain/bin/
           test -x app/src/main/assets/toolchain/bin/avr-gcc
           echo "CHECK: avr-gcc"
