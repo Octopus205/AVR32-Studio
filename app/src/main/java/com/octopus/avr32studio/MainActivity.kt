@@ -608,15 +608,16 @@ int main(void) {
                     return Pair(process.exitValue(), details)
                 }
 
+                // Keep the first Android ARMv7 compile conservative: disable optimizer/LTO
+                // until the cc1 runtime is proven stable on older 32-bit Android devices.
                 val commonArgs = listOf(
-                    "-v",
                     "-B$compilerPrefix/",
                     "-B$toolchainBin/",
                     "-B$libraryPath/",
                     "-I$includePath",
                     "-L$gccLibraryPath",
                     "-L$libraryPath",
-                    "-mmcu=$mcu", "-DF_CPU=8000000UL", "-Os", "-std=gnu11"
+                    "-mmcu=$mcu", "-DF_CPU=8000000UL", "-O0", "-fno-lto", "-std=gnu11"
                 )
 
                 val compileStage = runBuildStage(
