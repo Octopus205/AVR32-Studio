@@ -256,11 +256,17 @@ int main(void) {
             log.text = "Verification cannot run yet. The AVR-GCC ARM 32-bit toolchain is not bundled in this build. No syntax-check result is being claimed."
             return
         }
+        if (sourceExtension == ".ino") {
+            status.text = "●  ARDUINO CORE REQUIRED"
+            status.setTextColor(Color.rgb(238, 165, 65))
+            log.text = "Arduino .ino verification requires Arduino AVR Core and the sketch preprocessor, which are not integrated yet."
+            return
+        }
         val dir = File(filesDir, "projects/verify").apply { mkdirs() }
         val source = File(dir, "verify.c")
         source.writeText(editor.text.toString())
         try {
-            val process = ProcessBuilder(gcc.absolutePath, "-mmcu=atmega32", "-DF_CPU=8000000UL", "-std=gnu11", "-fsyntax-only", source.absolutePath).redirectErrorStream(true).start()
+            val process = ProcessBuilder(gcc.absolutePath, "-mmcu=" + (if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"), "-DF_CPU=8000000UL", "-std=gnu11", "-fsyntax-only", source.absolutePath).redirectErrorStream(true).start()
             val output = process.inputStream.bufferedReader().readText()
             val code = process.waitFor()
             status.text = if (code == 0) "●  VERIFY PASSED" else "●  VERIFY FAILED"
@@ -301,8 +307,15 @@ int main(void) {
 
     private fun compile() {
         val dir = File(filesDir, "projects/untitled").apply { mkdirs() }
-        val source = File(dir, "main.c")
+        val selectedName = if (sourceExtension == ".ino") "sketch.ino" else "main.c"
+        val source = File(dir, selectedName)
         source.writeText(editor.text.toString())
+        if (sourceExtension == ".ino") {
+            status.text = "●  ARDUINO CORE REQUIRED"
+            status.setTextColor(Color.rgb(238, 165, 65))
+            log.text = "The .ino sketch was saved, but Arduino AVR Core and the sketch preprocessor are not integrated yet. Build is intentionally stopped to avoid treating an Arduino sketch as plain C."
+            return
+        }
         val gcc = File(filesDir, "toolchain/bin/avr-gcc")
         val objcopy = File(filesDir, "toolchain/bin/avr-objcopy")
         if (!gcc.isFile || !objcopy.isFile) {
@@ -314,7 +327,7 @@ int main(void) {
         try {
             val elf = File(dir, "firmware.elf")
             val hex = File(dir, "firmware.hex")
-            val mcu = "atmega32"
+            val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
             val p = ProcessBuilder(gcc.absolutePath, "-mmcu=$mcu", "-DF_CPU=8000000UL", "-Os", "-std=gnu11", source.absolutePath, "-o", elf.absolutePath).redirectErrorStream(true).start()
             val messages = p.inputStream.bufferedReader().readText()
             if (p.waitFor() != 0) { status.text = "●  BUILD FAILED"; status.setTextColor(Color.RED); log.text = messages; return }
