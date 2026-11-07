@@ -151,7 +151,6 @@ int main(void) {
         val command = arrayListOf(File(toolchain, "bin/avr-gcc").absolutePath)
         command.addAll(args)
         return ProcessBuilder(command).apply {
-            environment()["GCC_EXEC_PREFIX"] = File(toolchain, "lib/gcc/").absolutePath + File.separator
             environment()["COMPILER_PATH"] = File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath
             environment()["PATH"] = File(toolchain, "bin").absolutePath + File.pathSeparator + (environment()["PATH"] ?: "")
             environment()["LIBRARY_PATH"] = File(toolchain, "avr/lib").absolutePath
@@ -442,7 +441,7 @@ int main(void) {
             val hex = File(dir, "firmware.hex")
             val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
             val toolchain = File(filesDir, "toolchain")
-            val p = avrProcessBuilder("-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/", "-I${File(toolchain, "avr/include").absolutePath}", "-L${File(toolchain, "avr/lib").absolutePath}", "-mmcu=$mcu", "-DF_CPU=8000000UL", "-Os", "-std=gnu11", source.absolutePath, "-o", elf.absolutePath).redirectErrorStream(true).start()
+            val p = avrProcessBuilder("-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/", "-B${File(toolchain, "bin").absolutePath}/", "-B${File(toolchain, "avr/lib").absolutePath}/", "-I${File(toolchain, "avr/include").absolutePath}", "-L${File(toolchain, "lib/gcc/avr/7.3.0").absolutePath}", "-L${File(toolchain, "avr/lib").absolutePath}", "-mmcu=$mcu", "-DF_CPU=8000000UL", "-Os", "-std=gnu11", source.absolutePath, "-o", elf.absolutePath).redirectErrorStream(true).start()
             val messages = p.inputStream.bufferedReader().readText()
             if (p.waitFor() != 0) { status.text = "●  BUILD FAILED"; status.setTextColor(Color.RED); log.text = messages; return }
             val q = ProcessBuilder(objcopy.absolutePath, "-O", "ihex", "-R", ".eeprom", elf.absolutePath, hex.absolutePath).redirectErrorStream(true).start()
