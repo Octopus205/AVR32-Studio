@@ -360,17 +360,16 @@ int main(void) {
     }
 
     private fun showConsolePage() {
-        val page = LinearLayout(this).apply {
+        val consoleRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(16))
             setBackgroundColor(page())
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         header.addView(label("BUILD CONSOLE", 18f, true, text()), LinearLayout.LayoutParams(0, dp(48), 1f))
-        val close = toolbarAction("×", "Close console") { }
-        close.setOnClickListener { }
+        val close = toolbarAction("×", "Back to editor") { setContentView(root) }
         header.addView(close)
-        page.addView(header)
+        consoleRoot.addView(header)
         val content = TextView(this).apply {
             text = log.text
             typeface = Typeface.MONOSPACE
@@ -381,10 +380,10 @@ int main(void) {
             background = bg(panel(), 12)
         }
         val scroll = ScrollView(this).apply { addView(content) }
-        page.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        consoleRoot.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         val closeButton = smallAction("BACK TO EDITOR", accent()) { setContentView(root) }
-        page.addView(closeButton, marginTop(10))
-        setContentView(page)
+        consoleRoot.addView(closeButton, marginTop(10))
+        setContentView(consoleRoot)
     }
 
     private fun showSearchDialog() {
