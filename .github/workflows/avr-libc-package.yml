@@ -34,7 +34,8 @@ jobs:
           avr-objcopy -O ihex -R .eeprom /tmp/libc-check.elf /tmp/libc-check.hex
           test -s /tmp/libc-check.hex
           tar -czf output/avr-libc-runtime.tar.gz -C package avr
-          tar -tzf output/avr-libc-runtime.tar.gz | head -30
+          tar -tzf output/avr-libc-runtime.tar.gz > /tmp/avr-libc-files.txt
+          head -30 /tmp/avr-libc-files.txt
       - name: Upload AVR Libc runtime
         uses: actions/upload-artifact@v4
         with:
