@@ -1,4 +1,5 @@
 name: Build AVR-GCC for Android ARMv7
+# Toolchain rebuild trigger for OctoAVR32A binutils alias packaging fix.
 on:
   workflow_dispatch:
   push:
