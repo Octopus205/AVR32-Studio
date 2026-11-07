@@ -1,5 +1,5 @@
 name: Build AVR-GCC for Android ARMv7
-# Rebuild trigger: include generic as/ld aliases and current APK build configuration.
+# Rebuild trigger: Kotlin syntax correction for v4 toolchain validation.
 on:
   workflow_dispatch:
   push:
