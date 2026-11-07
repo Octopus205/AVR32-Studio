@@ -277,7 +277,11 @@ int main(void) {
         editorHeader.addView(filenameLabel)
         root.addView(editorHeader, marginTop(4))
         tabsBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        root.addView(tabsBar, marginTop(2))
+        val tabsScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(tabsBar)
+        }
+        root.addView(tabsScroll, marginTop(2))
         renderTabs()
 
         // The editor occupies the available screen height and scrolls internally.
@@ -588,12 +592,14 @@ int main(void) {
         val gcc = File(filesDir, "toolchain/bin/avr-gcc")
         if (!gcc.isFile) {
             status.text = "●  COMPILER NOT INSTALLED"
+            statusBar.text = status.text.toString()
             status.setTextColor(Color.rgb(238, 165, 65))
             log.text = "Verification cannot run yet. The AVR-GCC ARM 32-bit toolchain is not bundled in this build. No syntax-check result is being claimed."
             return
         }
         if (sourceExtension == ".ino") {
             status.text = "●  ARDUINO CORE REQUIRED"
+            statusBar.text = status.text.toString()
             status.setTextColor(Color.rgb(238, 165, 65))
             log.text = "Arduino .ino verification requires Arduino AVR Core and the sketch preprocessor, which are not integrated yet."
             return
@@ -608,10 +614,11 @@ int main(void) {
             val output = process.inputStream.bufferedReader().readText()
             val code = process.waitFor()
             status.text = if (code == 0) "●  VERIFY PASSED" else "●  VERIFY FAILED"
+            statusBar.text = "${status.text}  ·  ${selectedHz/1000000} MHz"
             status.setTextColor(if (code == 0) Color.rgb(46, 190, 130) else Color.RED)
             log.text = if (output.isBlank()) "No compiler errors found." else output
         } catch (e: Exception) {
-            status.text = "●  VERIFY ERROR"; status.setTextColor(Color.RED); log.text = e.toString()
+            status.text = "●  VERIFY ERROR"; statusBar.text = status.text.toString(); status.setTextColor(Color.RED); log.text = e.toString()
         }
     }
 
@@ -662,6 +669,7 @@ int main(void) {
         buildInProgress = true
         val selectedHz = selectedClockHz()
         status.text = "●  BUILD RUNNING"
+        statusBar.text = "${status.text}  ·  ${selectedHz/1000000} MHz"
         status.setTextColor(accent())
         log.text = "Preparing compiler...\\nPlease wait. You can keep the app open."
 
