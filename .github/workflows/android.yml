@@ -19,7 +19,50 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.2'
-      # Pin MightyCore so Arduino support is reproducible.
+      - name: Download Android ARMv7 AVR-GCC
+        uses: actions/download-artifact@v4
+        with:
+          name: avr-gcc-android-armv7-api26
+          path: /tmp/toolchain
+          repository: Octopus205/AVR32-Studio
+          run-id: 42360515324
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download Android ARMv7 AVR Binutils
+        uses: actions/download-artifact@v4
+        with:
+          name: avr-binutils-android-armv7-api26
+          path: /tmp/binutils
+          repository: Octopus205/AVR32-Studio
+          run-id: 42357553712
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download AVR Libc target runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: avr-libc-runtime
+          path: /tmp/avr-libc
+          repository: Octopus205/AVR32-Studio
+          run-id: 42359867314
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Assemble Android AVR toolchain package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets/toolchain /tmp/avr-libc-unpacked
+          cp -R /tmp/toolchain/. app/src/main/assets/toolchain/
+          cp -R /tmp/binutils/. app/src/main/assets/toolchain/
+          tar -xzf /tmp/avr-libc/avr-libc-runtime.tar.gz -C /tmp/avr-libc-unpacked
+          cp -R /tmp/avr-libc-unpacked/avr app/src/main/assets/toolchain/
+          test -x app/src/main/assets/toolchain/bin/avr-gcc
+          test -x app/src/main/assets/toolchain/bin/avr-as
+          test -x app/src/main/assets/toolchain/bin/avr-objcopy
+          test -s app/src/main/assets/toolchain/libexec/gcc/avr/7.3.0/cc1
+          test -s app/src/main/assets/toolchain/avr/include/avr/io.h
+          readelf -h app/src/main/assets/toolchain/bin/avr-gcc | grep -E 'Class:|Machine:'
+          readelf -h app/src/main/assets/toolchain/bin/avr-as | grep -E 'Class:|Machine:'
+          chmod -R a+rX app/src/main/assets/toolchain
+          (cd app/src/main/assets && zip -qr avr-toolchain-armv7.zip toolchain)
+          test -s app/src/main/assets/avr-toolchain-armv7.zip
+          ls -lh app/src/main/assets/avr-toolchain-armv7.zip
       - name: Fetch MightyCore source package
         shell: bash
         run: |
