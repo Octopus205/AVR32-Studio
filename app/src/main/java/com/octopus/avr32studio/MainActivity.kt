@@ -359,12 +359,20 @@ int main(void) {
         brand.addView(label("OctoAVR32A", 19f, true, text()))
         brand.addView(label("AVR DEVELOPMENT STUDIO", 9f, true, muted()))
         toolbar.addView(brand, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        val search = toolbarAction("⌕", "Search in source") { showSearchDialog() }
-        val verify = toolbarAction("ϟ", "Verify source") { verifySource() }
+        val newFile = toolbarAction("+", "New source") { createNewSource() }
+        val openFile = toolbarAction("▱", "Open source") { openSource() }
+        val saveFile = toolbarAction("▣", "Save source") { saveSourceAs() }
+        val search = toolbarAction("⌕", "Find and replace") { showSearchDialog() }
+        val verify = toolbarAction("✓", "Verify source") { verifySource() }
         val build = toolbarAction("▶", "Build firmware") { compile() }
+        val more = toolbarAction("⋮", "More tools and settings") { showDrawer(toolbar) }
+        toolbar.addView(newFile)
+        toolbar.addView(openFile)
+        toolbar.addView(saveFile)
         toolbar.addView(search)
         toolbar.addView(verify)
         toolbar.addView(build)
+        toolbar.addView(more)
         root.addView(toolbar)
 
         val targetCard = card().apply { orientation = LinearLayout.VERTICAL }
@@ -468,15 +476,28 @@ int main(void) {
             setPadding(dp(10), dp(8), dp(10), dp(8))
             setTextIsSelectable(true)
         }
+        log.setHorizontallyScrolling(true)
+        val logHorizontal = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = true
+            addView(log, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
         val logScroll = ScrollView(this).apply {
             isFillViewport = true
-            addView(log, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            isVerticalScrollBarEnabled = true
+            addView(logHorizontal, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
-        outputCard.addView(logScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(104)))
+        val consoleActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        }
+        val copyLog = toolbarAction("⧉", "Copy console output") { copyConsoleOutput() }
+        consoleActions.addView(copyLog)
+        outputCard.addView(consoleActions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(32)))
+        outputCard.addView(logScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compact) 126 else 160)))
         root.addView(outputCard)
         statusBar = label("ATmega32A  ·  8 MHz", 10f, true, muted()).apply { setPadding(dp(6), dp(8), dp(6), dp(2)) }
         root.addView(statusBar)
-        root.addView(bottomNavigation(), marginTop(5))
+        // Keep the editor as the primary workspace; secondary actions live in the compact toolbar menu.
         setContentView(root)
         editor.textSize = getSharedPreferences("octo_settings", MODE_PRIVATE).getFloat("editor_font_size", if (compact) 12f else 14f)
         refreshStatusBar()
@@ -615,8 +636,18 @@ int main(void) {
     }
 
     private fun toggleConsole() {
-        consoleExpanded = !consoleExpanded
-        outputCard.visibility = if (consoleExpanded) View.VISIBLE else View.GONE
+        setConsoleExpanded(!consoleExpanded)
+    }
+
+    private fun setConsoleExpanded(expanded: Boolean) {
+        consoleExpanded = expanded
+        if (::outputCard.isInitialized) outputCard.visibility = if (expanded) View.VISIBLE else View.GONE
+    }
+
+    private fun copyConsoleOutput() {
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("OctoAVR32A console", log.text.toString()))
+        Toast.makeText(this, "Console output copied.", Toast.LENGTH_SHORT).show()
     }
 
     private fun toolbarAction(symbol: String, description: String, action: () -> Unit) =
@@ -910,6 +941,7 @@ int main(void) {
     }
 
     private fun verifySource() {
+        setConsoleExpanded(true)
         if (buildInProgress) { Toast.makeText(this, "Another compiler task is already running.", Toast.LENGTH_SHORT).show(); return }
         val gcc = File(filesDir, "toolchain/bin/avr-gcc")
         if (!gcc.isFile) {
@@ -1005,6 +1037,7 @@ int main(void) {
     @Volatile private var buildInProgress = false
 
     private fun compile() {
+        setConsoleExpanded(true)
         if (buildInProgress) {
             Toast.makeText(this, "Build is already running.", Toast.LENGTH_SHORT).show()
             return
