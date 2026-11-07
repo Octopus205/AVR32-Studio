@@ -78,9 +78,8 @@ jobs:
           test -s app/src/main/assets/toolchain/avr/include/avr/io.h
           echo "CHECK: avr libc headers"
           rm -rf app/src/main/assets/toolchain/share/info app/src/main/assets/toolchain/share/man
-          rm -rf app/src/main/assets/toolchain/libexec/gcc/avr/7.3.0/plugin
-          rm -f app/src/main/assets/toolchain/libexec/gcc/avr/7.3.0/lto1 app/src/main/assets/toolchain/libexec/gcc/avr/7.3.0/lto-wrapper
-          rm -f app/src/main/assets/toolchain/libexec/gcc/avr/7.3.0/liblto_plugin.*
+          test -s app/src/main/assets/toolchain/libexec/gcc/avr/7.3.0/liblto_plugin.so
+          echo "CHECK: LTO linker plugin"
           rm -f app/src/main/assets/toolchain/bin/avr-gcov*
           chmod -R a+rX app/src/main/assets/toolchain
           (cd app/src/main/assets && zip -qr avr-toolchain-armv7.zip toolchain)
