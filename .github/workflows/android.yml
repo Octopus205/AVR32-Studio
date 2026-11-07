@@ -59,7 +59,11 @@ jobs:
           echo "ASSEMBLY: GCC files copied"
           mkdir -p app/src/main/assets/toolchain/bin
           cp /tmp/binutils/avr-* app/src/main/assets/toolchain/bin/
-          echo "ASSEMBLY: binutils copied"
+          # GCC invokes the assembler/linker as "as"/"ld"; provide these aliases
+          # alongside the AVR-prefixed executable names.
+          cp app/src/main/assets/toolchain/bin/avr-as app/src/main/assets/toolchain/bin/as
+          cp app/src/main/assets/toolchain/bin/avr-ld app/src/main/assets/toolchain/bin/ld
+          echo "ASSEMBLY: binutils copied with GCC driver aliases"
           tar -xzf /tmp/avr-libc/avr-libc-runtime.tar.gz -C /tmp/avr-libc-unpacked
           echo "ASSEMBLY: libc unpacked"
           cp -R /tmp/avr-libc-unpacked/avr app/src/main/assets/toolchain/
@@ -71,6 +75,10 @@ jobs:
           echo "CHECK: avr-gcc"
           test -x app/src/main/assets/toolchain/bin/avr-as
           echo "CHECK: avr-as"
+          test -x app/src/main/assets/toolchain/bin/as
+          echo "CHECK: GCC assembler alias"
+          test -x app/src/main/assets/toolchain/bin/ld
+          echo "CHECK: GCC linker alias"
           test -x app/src/main/assets/toolchain/bin/avr-objcopy
           echo "CHECK: avr-objcopy"
           test -s app/src/main/assets/toolchain/libexec/gcc/avr/7.3.0/cc1
