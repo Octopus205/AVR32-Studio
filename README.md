@@ -26,7 +26,7 @@
 - **Editor features:** line numbers, syntax coloring, current-line highlight, file tabs and source search.
 - **Console:** collapsible build output and diagnostic messages.
 - **Appearance:** Dark Navy and Light themes.
-- **Build automation:** GitHub Actions builds the Android APK and publishes it as a workflow artifact.
+- **Build automation:** GitHub Actions builds the Android APK and publishes downloadable releases on GitHub.
 
 ## 📱 Compatibility
 
@@ -63,12 +63,11 @@ The app is designed for small phone screens as well as tablets. Actual performan
 
 ## 🚀 Download the APK
 
-1. Open the repository's [Actions page](https://github.com/Octopus205/AVR32-Studio/actions).
-2. Select the latest successful **Android APK build** workflow run.
-3. Find the **Artifacts** section and download `OctoAVR32A-debug`.
-4. Extract the downloaded ZIP and install the APK on a compatible Android device.
+1. Open the project's [Releases page](https://github.com/Octopus205/AVR32-Studio/releases/latest).
+2. Under the latest release, expand **Assets**.
+3. Download `OctoAVR32A-Android-ARMv7.apk` and install it on a compatible Android device.
 
-[![Latest workflow](https://img.shields.io/badge/Download-latest%20APK-2f81f7?logo=github)](https://github.com/Octopus205/AVR32-Studio/actions)
+[![Latest release](https://img.shields.io/badge/Download-latest%20release-2f81f7?logo=github)](https://github.com/Octopus205/AVR32-Studio/releases/latest)
 
 ## 🛠️ Build from source
 
