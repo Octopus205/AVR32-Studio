@@ -120,7 +120,7 @@ jobs:
           echo "OCTO_KEYSTORE_PATH=$GITHUB_WORKSPACE/app/octo-upload.jks" >> "$GITHUB_ENV"
           echo "OCTO_KEYSTORE_PASSWORD=$OCTO_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
       - name: Build debug APK
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon assembleDebug -PappVersionCode=${{ github.run_number }} -PappVersionName=0.2.${{ github.run_number }}
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
