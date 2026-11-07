@@ -636,8 +636,8 @@ int main(void) {
         val source = editable.toString()
         if (source.isNotEmpty() && ::editor.isInitialized) {
             val cursor = editor.selectionStart.coerceIn(0, source.length)
-            val lineStart = if (cursor == 0) 0 else source.lastIndexOf(\'\\n\', cursor - 1) + 1
-            val foundEnd = source.indexOf(\'\\n\', cursor)
+            val lineStart = if (cursor == 0) 0 else source.lastIndexOf('\n', cursor - 1) + 1
+            val foundEnd = source.indexOf('\n', cursor)
             val lineEnd = if (foundEnd < 0) source.length else foundEnd
             if (lineEnd > lineStart) editable.setSpan(BackgroundColorSpan(if (dark) Color.rgb(31, 48, 70) else Color.rgb(235, 243, 253)), lineStart, lineEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
