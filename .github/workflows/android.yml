@@ -48,23 +48,33 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p app/src/main/assets/toolchain /tmp/avr-libc-unpacked
+          echo "ASSEMBLY: dirs ready"
           cp -R /tmp/toolchain/. app/src/main/assets/toolchain/
+          echo "ASSEMBLY: GCC files copied"
           mkdir -p app/src/main/assets/toolchain/bin
           cp /tmp/binutils/avr-* app/src/main/assets/toolchain/bin/
+          echo "ASSEMBLY: binutils copied"
           tar -xzf /tmp/avr-libc/avr-libc-runtime.tar.gz -C /tmp/avr-libc-unpacked
+          echo "ASSEMBLY: libc unpacked"
           cp -R /tmp/avr-libc-unpacked/avr app/src/main/assets/toolchain/
+          echo "ASSEMBLY: libc copied"
+          ls -l app/src/main/assets/toolchain/bin/
           test -x app/src/main/assets/toolchain/bin/avr-gcc
+          echo "CHECK: avr-gcc"
           test -x app/src/main/assets/toolchain/bin/avr-as
+          echo "CHECK: avr-as"
           test -x app/src/main/assets/toolchain/bin/avr-objcopy
+          echo "CHECK: avr-objcopy"
           test -s app/src/main/assets/toolchain/libexec/gcc/avr/7.3.0/cc1
+          echo "CHECK: cc1"
           test -s app/src/main/assets/toolchain/avr/include/avr/io.h
-          file app/src/main/assets/toolchain/bin/avr-gcc app/src/main/assets/toolchain/bin/avr-as app/src/main/assets/toolchain/bin/avr-objcopy || true
-          readelf -h app/src/main/assets/toolchain/bin/avr-gcc || true
-          readelf -h app/src/main/assets/toolchain/bin/avr-as || true
+          echo "CHECK: avr libc headers"
           chmod -R a+rX app/src/main/assets/toolchain
           (cd app/src/main/assets && zip -qr avr-toolchain-armv7.zip toolchain)
-          test -s app/src/main/assets/avr-toolchain-armv7.zip
+          echo "ASSEMBLY: archive created"
           ls -lh app/src/main/assets/avr-toolchain-armv7.zip
+          test -s app/src/main/assets/avr-toolchain-armv7.zip
+          echo "ASSEMBLY: archive verified"
       - name: Fetch MightyCore source package
         shell: bash
         run: |
