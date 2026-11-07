@@ -154,6 +154,7 @@ int main(void) {
             environment()["COMPILER_PATH"] = File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath
             environment()["PATH"] = File(toolchain, "bin").absolutePath + File.pathSeparator + (environment()["PATH"] ?: "")
             environment()["LIBRARY_PATH"] = File(toolchain, "avr/lib").absolutePath
+            environment()["LD_LIBRARY_PATH"] = File(toolchain, "lib").absolutePath + File.pathSeparator + (environment()["LD_LIBRARY_PATH"] ?: "")
         }
     }
 
