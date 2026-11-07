@@ -1,5 +1,5 @@
 name: Build AVR-GCC for Android ARMv7
-# Rebuild trigger: regenerate the ARMv7 AVR-GCC artifact for the current IDE release.
+# Rebuild trigger: regenerate the ARMv7 AVR-GCC artifact for the current IDE release and Android APK.
 on:
   workflow_dispatch:
   push:
