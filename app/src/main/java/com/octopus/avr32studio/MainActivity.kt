@@ -1,6 +1,8 @@
 package com.octopus.avr32studio
 
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.graphics.Color
 import android.graphics.Typeface
@@ -24,6 +26,9 @@ class MainActivity : Activity() {
     private lateinit var target: Spinner
     private lateinit var themeButton: TextView
     private var dark = true
+    private var lastHexFile: File? = null
+    private var lastElfFile: File? = null
+    private var sourceExtension = ".c"
 
     private val codeSample = """#define F_CPU 8000000UL
 #include <avr/io.h>
@@ -126,16 +131,34 @@ int main(void) {
         })
         root.addView(editorCard)
 
+        val fileRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val openButton = smallAction("OPEN", muted()) { openSource() }
+        val saveButton = smallAction("SAVE AS", accent()) { saveSourceAs() }
+        fileRow.addView(openButton, LinearLayout.LayoutParams(0, dp(42), 1f))
+        fileRow.addView(saveButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { leftMargin = dp(8) })
+        root.addView(fileRow, marginTop(10))
+
         val actionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val verify = TextView(this).apply {
+            text = "✓  VERIFY"; textSize = 12f; typeface = Typeface.DEFAULT_BOLD
+            setTextColor(accent()); gravity = Gravity.CENTER
+            background = bg(panel(), 12, accent()); setPadding(dp(10), dp(14), dp(10), dp(14))
+            setOnClickListener { verifySource() }
+        }
         val compile = TextView(this).apply {
-            text = "▶   BUILD FIRMWARE"; textSize = 14f; typeface = Typeface.DEFAULT_BOLD
+            text = "▶  BUILD"; textSize = 13f; typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE); gravity = Gravity.CENTER
-            background = bg(accent(), 14); setPadding(dp(12), dp(15), dp(12), dp(15))
+            background = bg(accent(), 12); setPadding(dp(10), dp(14), dp(10), dp(14))
             setOnClickListener { compile() }
         }
-        actionRow.addView(compile, LinearLayout.LayoutParams(0, dp(52), 1f))
-        actionRow.addView(label("HEX  •  ELF", 10f, true, muted()).apply { setPadding(dp(12), 0, 0, 0) })
-        root.addView(actionRow, marginTop(12))
+        actionRow.addView(verify, LinearLayout.LayoutParams(0, dp(50), 1f))
+        actionRow.addView(compile, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(8) })
+        root.addView(actionRow, marginTop(10))
+
+        val exportRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        exportRow.addView(smallAction("EXPORT HEX", muted()) { exportArtifact(lastHexFile, "application/octet-stream", "firmware.hex") }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        exportRow.addView(smallAction("EXPORT ELF", muted()) { exportArtifact(lastElfFile, "application/octet-stream", "firmware.elf") }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { leftMargin = dp(8) })
+        root.addView(exportRow, marginTop(6))
 
         val outputHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         outputHeader.addView(label("BUILD CONSOLE", 11f, true, muted()), LinearLayout.LayoutParams(0, dp(32), 1f))
@@ -153,6 +176,99 @@ int main(void) {
 
         setContentView(root)
         highlight(editor.text)
+    }
+
+    private fun smallAction(value: String, color: Int, action: () -> Unit) = TextView(this).apply {
+        text = value; textSize = 11f; typeface = Typeface.DEFAULT_BOLD
+        setTextColor(color); gravity = Gravity.CENTER
+        background = bg(panel(), 10, if (dark) Color.rgb(45, 65, 92) else Color.rgb(215, 225, 238))
+        setOnClickListener { action() }
+    }
+
+    private fun saveSourceAs() {
+        val options = arrayOf("C source (.c)", "Arduino sketch (.ino)")
+        android.app.AlertDialog.Builder(this).setTitle("Save source as")
+            .setItems(options) { _, which ->
+                sourceExtension = if (which == 0) ".c" else ".ino"
+                val mime = if (which == 0) "text/x-c" else "text/plain"
+                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE); type = mime
+                    putExtra(Intent.EXTRA_TITLE, if (which == 0) "main.c" else "sketch.ino")
+                }
+                startActivityForResult(intent, 4101)
+            }.show()
+    }
+
+    private fun openSource() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE); type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/plain", "text/x-c", "application/octet-stream"))
+        }
+        startActivityForResult(intent, 4102)
+    }
+
+    private fun exportArtifact(file: File?, mime: String, name: String) {
+        if (file == null || !file.exists()) {
+            Toast.makeText(this, "No generated file available yet.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE); type = mime
+            putExtra(Intent.EXTRA_TITLE, name)
+        }
+        startActivityForResult(intent, if (name.endsWith(".hex")) 4103 else 4104)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        try {
+            when (requestCode) {
+                4101 -> {
+                    contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(editor.text.toString()) }
+                    Toast.makeText(this, "Source saved.", Toast.LENGTH_SHORT).show()
+                }
+                4102 -> {
+                    val source = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
+                    editor.setText(source)
+                    Toast.makeText(this, "Source opened.", Toast.LENGTH_SHORT).show()
+                }
+                4103 -> copyArtifact(uri, lastHexFile)
+                4104 -> copyArtifact(uri, lastElfFile)
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "File operation failed: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun copyArtifact(uri: Uri, file: File?) {
+        if (file == null || !file.exists()) return
+        contentResolver.openOutputStream(uri)?.use { out -> file.inputStream().use { input -> input.copyTo(out) } }
+        Toast.makeText(this, "Export completed.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun verifySource() {
+        val gcc = File(filesDir, "toolchain/bin/avr-gcc")
+        if (!gcc.isFile) {
+            status.text = "●  COMPILER NOT INSTALLED"
+            status.setTextColor(Color.rgb(238, 165, 65))
+            log.text = "Verification cannot run yet. The AVR-GCC ARM 32-bit toolchain is not bundled in this build. No syntax-check result is being claimed."
+            return
+        }
+        val dir = File(filesDir, "projects/verify").apply { mkdirs() }
+        val source = File(dir, "verify.c")
+        source.writeText(editor.text.toString())
+        try {
+            val process = ProcessBuilder(gcc.absolutePath, "-mmcu=atmega32", "-DF_CPU=8000000UL", "-std=gnu11", "-fsyntax-only", source.absolutePath).redirectErrorStream(true).start()
+            val output = process.inputStream.bufferedReader().readText()
+            val code = process.waitFor()
+            status.text = if (code == 0) "●  VERIFY PASSED" else "●  VERIFY FAILED"
+            status.setTextColor(if (code == 0) Color.rgb(46, 190, 130) else Color.RED)
+            log.text = if (output.isBlank()) "No compiler errors found." else output
+        } catch (e: Exception) {
+            status.text = "●  VERIFY ERROR"; status.setTextColor(Color.RED); log.text = e.toString()
+        }
     }
 
     private fun label(value: String, size: Float, bold: Boolean, color: Int) = TextView(this).apply {
