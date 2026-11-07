@@ -1,0 +1,41 @@
+name: Build Arduino CLI for Android ARMv7
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/android-arduino-cli.yml'
+
+jobs:
+  build-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - name: Checkout Arduino CLI source
+        uses: actions/checkout@v4
+        with:
+          repository: arduino/arduino-cli
+          ref: 1.3.1
+          path: arduino-cli-src
+      - name: Build Android ARMv7 executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd arduino-cli-src
+          export GOOS=android
+          export GOARCH=arm
+          export GOARM=7
+          export CGO_ENABLED=0
+          go build -trimpath -ldflags="-s -w" -o "$GITHUB_WORKSPACE/arduino-cli-armv7" .
+          file "$GITHUB_WORKSPACE/arduino-cli-armv7"
+          readelf -h "$GITHUB_WORKSPACE/arduino-cli-armv7" | grep -E 'Class:|Machine:'
+          chmod 755 "$GITHUB_WORKSPACE/arduino-cli-armv7"
+      - name: Upload Android ARMv7 Arduino CLI
+        uses: actions/upload-artifact@v4
+        with:
+          name: arduino-cli-android-armv7
+          path: arduino-cli-armv7
+          if-no-files-found: error
