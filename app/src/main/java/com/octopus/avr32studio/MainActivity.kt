@@ -44,7 +44,7 @@ int main(void) {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        dark = getPreferences(0).getBoolean("dark_theme", true)
+        dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
         buildUi()
         installAvrToolchain()
         installMightyCoreSources()
@@ -184,63 +184,81 @@ int main(void) {
     private fun buildUi() {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+            setPadding(dp(12), dp(8), dp(12), dp(8))
             setBackgroundColor(page())
         }
 
-        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        brand.addView(label("🐙  OctoAVR32A", 23f, true, text()))
-        brand.addView(label("AVR DEVELOPMENT STUDIO", 10f, true, muted()))
-        header.addView(brand, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        themeButton = label(if (dark) "☀" else "☾", 22f, true, accent()).apply {
-            gravity = Gravity.CENTER; background = bg(panel(), 14, muted()); setPadding(dp(14), dp(8), dp(14), dp(8))
-            setOnClickListener {
-                dark = !dark
-                getPreferences(0).edit().putBoolean("dark_theme", dark).apply()
-                buildUi()
-            }
+        // Compact IDE toolbar: navigation, Verify (lightning), Build and Search.
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(themeButton)
-        root.addView(header)
+        val menu = label("☰", 25f, true, text()).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(10), dp(8), dp(14), dp(8))
+            setOnClickListener { showDrawer(it) }
+        }
+        toolbar.addView(menu)
+        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        brand.addView(label("OctoAVR32A", 19f, true, text()))
+        brand.addView(label("AVR DEVELOPMENT STUDIO", 9f, true, muted()))
+        toolbar.addView(brand, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val search = toolbarAction("⌕", "Search in source") { showSearchDialog() }
+        val verify = toolbarAction("ϟ", "Verify source") { verifySource() }
+        val build = toolbarAction("▶", "Build firmware") { compile() }
+        toolbar.addView(search)
+        toolbar.addView(verify)
+        toolbar.addView(build)
+        root.addView(toolbar)
 
-        val targetCard = card()
-        targetCard.orientation = LinearLayout.VERTICAL
-        targetCard.addView(label("PROJECT TARGET", 10f, true, muted()))
+        val targetCard = card().apply { orientation = LinearLayout.VERTICAL }
         val targetRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        targetRow.addView(label("TARGET", 10f, true, muted()))
         target = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("ATmega32A", "ATmega32"))
             setSelection(0)
         }
-        targetRow.addView(target, LinearLayout.LayoutParams(0, dp(48), 1f))
-        targetRow.addView(label("●  8 MHz", 13f, true, accent()).apply { gravity = Gravity.CENTER; setPadding(dp(10), 0, dp(8), 0) })
+        targetRow.addView(target, LinearLayout.LayoutParams(0, dp(42), 1f))
+        targetRow.addView(label("8 MHz", 12f, true, accent()).apply { gravity = Gravity.CENTER; setPadding(dp(8), 0, dp(8), 0) })
         targetCard.addView(targetRow)
-        root.addView(targetCard, marginTop(16))
+        root.addView(targetCard, marginTop(8))
 
         val editorHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        editorHeader.addView(label("SOURCE CODE", 11f, true, muted()), LinearLayout.LayoutParams(0, dp(32), 1f))
-        editorHeader.addView(label("main.c", 11f, true, accent()).apply { setPadding(dp(10), dp(5), dp(10), dp(5)); background = bg(if (dark) Color.rgb(13, 52, 86) else Color.rgb(225, 242, 255), 8) })
-        root.addView(editorHeader, marginTop(12))
+        editorHeader.addView(label("EDITOR", 10f, true, muted()), LinearLayout.LayoutParams(0, dp(30), 1f))
+        editorHeader.addView(label(if (sourceExtension == ".ino") "sketch.ino" else "main.c", 11f, true, accent()).apply {
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+            background = bg(if (dark) Color.rgb(13, 52, 86) else Color.rgb(225, 242, 255), 8)
+        })
+        root.addView(editorHeader, marginTop(4))
 
-        val editorCard = card()
-        editorCard.orientation = LinearLayout.HORIZONTAL
+        // The editor occupies the available screen height and scrolls internally.
+        val editorCard = card().apply { orientation = LinearLayout.HORIZONTAL }
         gutter = TextView(this).apply {
-            typeface = Typeface.MONOSPACE; textSize = 13f; setTextColor(muted())
-            setPadding(dp(10), dp(12), dp(8), dp(12)); gravity = Gravity.TOP or Gravity.END
+            typeface = Typeface.MONOSPACE
+            textSize = 12f
+            setTextColor(muted())
+            setPadding(dp(8), dp(12), dp(8), dp(12))
+            gravity = Gravity.TOP or Gravity.END
             setBackgroundColor(if (dark) Color.rgb(13, 25, 44) else Color.rgb(239, 244, 250))
             text = "1"
         }
         editorCard.addView(gutter, LinearLayout.LayoutParams(dp(38), ViewGroup.LayoutParams.MATCH_PARENT))
         editor = EditText(this).apply {
-            typeface = Typeface.MONOSPACE; textSize = 13f; setTextColor(text())
-            setHintTextColor(muted()); setHint("Write AVR C code...")
-            setPadding(dp(10), dp(12), dp(10), dp(12))
+            typeface = Typeface.MONOSPACE
+            textSize = 13f
+            setTextColor(text())
+            setHintTextColor(muted())
+            setHint("Write AVR C code...")
+            setPadding(dp(12), dp(12), dp(12), dp(12))
             gravity = Gravity.TOP or Gravity.START
             setBackgroundColor(Color.TRANSPARENT)
-            setSingleLine(false); isVerticalScrollBarEnabled = true
+            setSingleLine(false)
+            isVerticalScrollBarEnabled = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            setHorizontallyScrolling(true)
             setText(codeSample)
         }
-        editorCard.addView(editor, LinearLayout.LayoutParams(0, dp(300), 1f))
+        editorCard.addView(editor, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         editor.setOnScrollChangeListener { _, _, scrollY, _, _ -> gutter.scrollTo(0, scrollY) }
         editor.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -250,60 +268,142 @@ int main(void) {
             }
             override fun afterTextChanged(s: Editable?) { highlight(s) }
         })
-        root.addView(editorCard)
+        root.addView(editorCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        val fileRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val openButton = smallAction("OPEN", muted()) { openSource() }
-        val saveButton = smallAction("SAVE AS", accent()) { saveSourceAs() }
-        fileRow.addView(openButton, LinearLayout.LayoutParams(0, dp(42), 1f))
-        fileRow.addView(saveButton, LinearLayout.LayoutParams(0, dp(42), 1f).apply { leftMargin = dp(8) })
-        root.addView(fileRow, marginTop(10))
-
-        val actionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val verify = TextView(this).apply {
-            text = "✓  VERIFY"; textSize = 12f; typeface = Typeface.DEFAULT_BOLD
-            setTextColor(accent()); gravity = Gravity.CENTER
-            background = bg(panel(), 12, accent()); setPadding(dp(10), dp(14), dp(10), dp(14))
-            setOnClickListener { verifySource() }
-        }
-        val compile = TextView(this).apply {
-            text = "▶  BUILD"; textSize = 13f; typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE); gravity = Gravity.CENTER
-            background = bg(accent(), 12); setPadding(dp(10), dp(14), dp(10), dp(14))
-            setOnClickListener { compile() }
-        }
-        actionRow.addView(verify, LinearLayout.LayoutParams(0, dp(50), 1f))
-        actionRow.addView(compile, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(8) })
-        root.addView(actionRow, marginTop(10))
-
-        val exportRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        exportRow.addView(smallAction("EXPORT HEX", muted()) { exportArtifact(lastHexFile, "application/octet-stream", "firmware.hex") }, LinearLayout.LayoutParams(0, dp(40), 1f))
-        exportRow.addView(smallAction("EXPORT ELF", muted()) { exportArtifact(lastElfFile, "application/octet-stream", "firmware.elf") }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { leftMargin = dp(8) })
-        root.addView(exportRow, marginTop(6))
-
-        val outputHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        outputHeader.addView(label("BUILD CONSOLE", 11f, true, muted()), LinearLayout.LayoutParams(0, dp(32), 1f))
-        status = label("●  READY", 10f, true, Color.rgb(46, 190, 130))
-        outputHeader.addView(status)
-        root.addView(outputHeader, marginTop(10))
+        // Console remains visible at the bottom; the drawer also opens it as a full page.
+        val consoleHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        consoleHeader.addView(label("CONSOLE", 10f, true, muted()), LinearLayout.LayoutParams(0, dp(28), 1f))
+        status = label("● READY", 10f, true, Color.rgb(46, 190, 130))
+        consoleHeader.addView(status)
+        root.addView(consoleHeader, marginTop(6))
         val outputCard = card()
         log = label("Build messages will appear here.", 11f, false, muted()).apply {
-            typeface = Typeface.MONOSPACE; setPadding(dp(12), dp(12), dp(12), dp(12)); setTextIsSelectable(true)
+            typeface = Typeface.MONOSPACE
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            setTextIsSelectable(true)
         }
-        val logScroll = ScrollView(this).apply { addView(log) }
-        outputCard.addView(logScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(116)))
-        root.addView(outputCard)
-        root.addView(label("OctoAVR32A  •  ATmega family only", 9f, false, muted()).apply { gravity = Gravity.CENTER }, marginTop(8))
-
-        val pageScroll = ScrollView(this).apply {
+        val logScroll = ScrollView(this).apply {
             isFillViewport = true
-            addView(root, ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ))
+            addView(log, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
-        setContentView(pageScroll)
+        outputCard.addView(logScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(104)))
+        root.addView(outputCard)
+        setContentView(root)
         highlight(editor.text)
+    }
+
+    private fun toolbarAction(symbol: String, description: String, action: () -> Unit) =
+        TextView(this).apply {
+            text = symbol
+            contentDescription = description
+            textSize = 23f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(accent())
+            gravity = Gravity.CENTER
+            background = bg(panel(), 10)
+            setPadding(dp(11), dp(7), dp(11), dp(7))
+            setOnClickListener { action() }
+        }
+
+    private fun showDrawer(anchor: View) {
+        val drawer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(20), dp(16), dp(16))
+            setBackgroundColor(panel())
+        }
+        drawer.addView(label("OctoAVR32A", 21f, true, text()))
+        drawer.addView(label("PROJECT WORKSPACE", 9f, true, muted()).apply { setPadding(0, dp(4), 0, dp(18) })
+        fun item(title: String, subtitle: String? = null, action: () -> Unit) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(10), dp(11), dp(8), dp(11))
+                background = bg(if (dark) Color.rgb(23, 39, 63) else Color.rgb(246, 249, 253), 10)
+                setOnClickListener { action() }
+            }
+            row.addView(label(title, 14f, true, text()))
+            if (subtitle != null) row.addView(label(subtitle, 10f, false, muted()))
+            drawer.addView(row, marginTop(6))
+        }
+        lateinit var popup: PopupWindow
+        popup = PopupWindow(drawer, dp(285), ViewGroup.LayoutParams.MATCH_PARENT, true).apply {
+            elevation = dp(18).toFloat()
+            setBackgroundDrawable(bg(panel(), 0))
+            isOutsideTouchable = true
+        }
+        item("New / Reset source", "Start with the AVR example") {
+            popup.dismiss()
+            editor.setText(codeSample)
+            sourceExtension = ".c"
+        }
+        item("Open source", "Open .c or .ino") { popup.dismiss(); openSource() }
+        item("Save As", "Save source file") { popup.dismiss(); saveSourceAs() }
+        item("Verify", "Check source syntax") { popup.dismiss(); verifySource() }
+        item("Build", "Generate firmware.elf and firmware.hex") { popup.dismiss(); compile() }
+        item("Console", "Open the full console page") { popup.dismiss(); showConsolePage() }
+        item("Export HEX", "Export Intel HEX") { popup.dismiss(); exportArtifact(lastHexFile, "application/octet-stream", "firmware.hex") }
+        item("Export ELF", "Export ELF file") { popup.dismiss(); exportArtifact(lastElfFile, "application/octet-stream", "firmware.elf") }
+        item("Settings", "Target clock: 8 MHz · MCU: ATmega32 family") {
+            popup.dismiss()
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Settings")
+                .setMessage("Target devices: ATmega32A and ATmega32 only.\nCPU frequency: 8 MHz.\nAppearance: follows Android system theme.")
+                .setPositiveButton("OK", null).show()
+        }
+        item("About", "AVR compiler for Android") {
+            popup.dismiss()
+            android.app.AlertDialog.Builder(this)
+                .setTitle("About OctoAVR32A")
+                .setMessage("A focused AVR development environment for ATmega32A / ATmega32.\n\nOffline AVR-GCC toolchain · Verify · Build · HEX / ELF export.")
+                .setPositiveButton("Close", null).show()
+        }
+        popup.showAtLocation(root, Gravity.START or Gravity.TOP, 0, 0)
+    }
+
+    private fun showConsolePage() {
+        val page = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            setBackgroundColor(page())
+        }
+        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        header.addView(label("BUILD CONSOLE", 18f, true, text()), LinearLayout.LayoutParams(0, dp(48), 1f))
+        val close = toolbarAction("×", "Close console") { }
+        close.setOnClickListener { }
+        header.addView(close)
+        page.addView(header)
+        val content = TextView(this).apply {
+            text = log.text
+            typeface = Typeface.MONOSPACE
+            textSize = 12f
+            setTextColor(text())
+            setTextIsSelectable(true)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = bg(panel(), 12)
+        }
+        val scroll = ScrollView(this).apply { addView(content) }
+        page.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        val closeButton = smallAction("BACK TO EDITOR", accent()) { setContentView(root) }
+        page.addView(closeButton, marginTop(10))
+        setContentView(page)
+    }
+
+    private fun showSearchDialog() {
+        val query = EditText(this).apply { hint = "Find text in source" }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Search in editor")
+            .setView(query)
+            .setPositiveButton("Find") { _, _ ->
+                val term = query.text.toString()
+                if (term.isNotEmpty()) {
+                    val index = editor.text.toString().indexOf(term, ignoreCase = true)
+                    if (index >= 0) {
+                        editor.requestFocus()
+                        editor.setSelection(index, index + term.length)
+                    } else Toast.makeText(this, "Text not found.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun smallAction(value: String, color: Int, action: () -> Unit) = TextView(this).apply {
