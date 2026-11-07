@@ -1,0 +1,64 @@
+name: Build AVR Binutils for Android ARMv7
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/android-avr-binutils.yml'
+
+jobs:
+  build-binutils:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bison flex texinfo wget xz-utils file
+      - name: Install Android NDK r26d
+        shell: bash
+        run: |
+          set -euo pipefail
+          wget --quiet https://dl.google.com/android/repository/android-ndk-r26d-linux.zip -O "$RUNNER_TEMP/ndk.zip"
+          unzip -q "$RUNNER_TEMP/ndk.zip" -d "$RUNNER_TEMP"
+          echo "NDK=$RUNNER_TEMP/android-ndk-r26d" >> "$GITHUB_ENV"
+      - name: Download GNU Binutils
+        run: |
+          set -euo pipefail
+          wget --quiet https://ftp.gnu.org/gnu/binutils/binutils-2.42.tar.xz -O "$RUNNER_TEMP/binutils.tar.xz"
+          mkdir -p "$RUNNER_TEMP/src"
+          tar -xf "$RUNNER_TEMP/binutils.tar.xz" -C "$RUNNER_TEMP/src"
+      - name: Cross-build AVR Binutils for Android ARMv7
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
+          export PATH="$TOOLCHAIN/bin:$PATH"
+          export CC="$TOOLCHAIN/bin/armv7a-linux-androideabi26-clang"
+          export CXX="$TOOLCHAIN/bin/armv7a-linux-androideabi26-clang++"
+          export AR="$TOOLCHAIN/bin/llvm-ar"
+          export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
+          export CFLAGS="-O2 -fPIC"
+          export CXXFLAGS="-O2 -fPIC"
+          mkdir -p "$RUNNER_TEMP/build-binutils" "$RUNNER_TEMP/avr-prefix"
+          cd "$RUNNER_TEMP/build-binutils"
+          "$RUNNER_TEMP/src/binutils-2.42/configure" \
+            --build=x86_64-pc-linux-gnu \
+            --host=arm-linux-androideabi \
+            --target=avr \
+            --prefix="$RUNNER_TEMP/avr-prefix" \
+            --disable-nls --disable-werror --disable-gdb --disable-sim \
+            --disable-gprofng --disable-libdecnumber --disable-readline
+          make -j2
+          make install
+          test -x "$RUNNER_TEMP/avr-prefix/bin/avr-as"
+          test -x "$RUNNER_TEMP/avr-prefix/bin/avr-objcopy"
+          file "$RUNNER_TEMP/avr-prefix/bin/avr-as"
+          readelf -h "$RUNNER_TEMP/avr-prefix/bin/avr-as" | grep -E 'Class:|Machine:'
+          mkdir -p "$GITHUB_WORKSPACE/output"
+          cp -R "$RUNNER_TEMP/avr-prefix/bin" "$GITHUB_WORKSPACE/output/"
+      - name: Upload Android ARMv7 AVR Binutils
+        uses: actions/upload-artifact@v4
+        with:
+          name: avr-binutils-android-armv7-api26
+          path: output/bin/*
+          if-no-files-found: error
