@@ -95,8 +95,11 @@ int main(void) {
     private fun installAvrToolchain() {
         val destination = File(filesDir, "toolchain")
         val marker = File(destination, ".octo-toolchain-installed")
-        if (marker.isFile && File(destination, "bin/avr-gcc").canExecute() &&
-            File(destination, "bin/avr-objcopy").canExecute()) return
+        if (marker.isFile && marker.readText().trim() == "Octo AVR ARMv7 toolchain package v3" &&
+            File(destination, "bin/avr-gcc").canExecute() &&
+            File(destination, "bin/avr-objcopy").canExecute() &&
+            File(destination, "lib/libc++_shared.so").isFile &&
+            File(destination, "libexec/gcc/avr/7.3.0/liblto_plugin.so").isFile) return
         try {
             destination.deleteRecursively()
             destination.mkdirs()
@@ -137,7 +140,7 @@ int main(void) {
             gcc.setExecutable(true, false)
             objcopy.setExecutable(true, false)
             cc1.setExecutable(true, false)
-            marker.writeText("Octo AVR ARMv7 toolchain package")
+            marker.writeText("Octo AVR ARMv7 toolchain package v3")
             log.text = "AVR toolchain installed. Compiler runtime checks will run when Verify/Build is selected."
         } catch (e: Exception) {
             destination.deleteRecursively()
@@ -150,7 +153,12 @@ int main(void) {
         val toolchain = File(filesDir, "toolchain")
         val command = arrayListOf(File(toolchain, "bin/avr-gcc").absolutePath)
         command.addAll(args)
+        val workDir = File(filesDir, "compiler-work").apply { mkdirs() }
         return ProcessBuilder(command).apply {
+            directory(workDir)
+            environment()["TMPDIR"] = workDir.absolutePath
+            environment()["TMP"] = workDir.absolutePath
+            environment()["TEMP"] = workDir.absolutePath
             environment()["COMPILER_PATH"] = File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath
             environment()["PATH"] = File(toolchain, "bin").absolutePath + File.pathSeparator + (environment()["PATH"] ?: "")
             environment()["LIBRARY_PATH"] = File(toolchain, "avr/lib").absolutePath
