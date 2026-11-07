@@ -95,11 +95,11 @@ int main(void) {
     private fun installAvrToolchain() {
         val destination = File(filesDir, "toolchain")
         val marker = File(destination, ".octo-toolchain-installed")
-        if (marker.isFile && marker.readText().trim() == "Octo AVR ARMv7 toolchain package v3" &&
+        if (marker.isFile && marker.readText().trim() == "Octo AVR ARMv7 toolchain package v4" &&
             File(destination, "bin/avr-gcc").canExecute() &&
             File(destination, "bin/avr-objcopy").canExecute() &&
             File(destination, "lib/libc++_shared.so").isFile &&
-            File(destination, "libexec/gcc/avr/7.3.0/liblto_plugin.so").isFile) return
+            File(destination, "libexec/gcc/avr/7.3.0/liblto_plugin.so").isFile &&\n            File(destination, "bin/as").canExecute() &&\n            File(destination, "bin/ld").canExecute()) return
         try {
             destination.deleteRecursively()
             destination.mkdirs()
@@ -140,7 +140,7 @@ int main(void) {
             gcc.setExecutable(true, false)
             objcopy.setExecutable(true, false)
             cc1.setExecutable(true, false)
-            marker.writeText("Octo AVR ARMv7 toolchain package v3")
+            marker.writeText("Octo AVR ARMv7 toolchain package v4")
             log.text = "AVR toolchain installed. Compiler runtime checks will run when Verify/Build is selected."
         } catch (e: Exception) {
             destination.deleteRecursively()
@@ -394,7 +394,7 @@ int main(void) {
         source.writeText(editor.text.toString())
         try {
             val toolchain = File(filesDir, "toolchain")
-            val process = avrProcessBuilder("-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/", "-I${File(toolchain, "avr/include").absolutePath}", "-mmcu=" + (if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"), "-DF_CPU=8000000UL", "-std=gnu11", "-fsyntax-only", source.absolutePath).redirectErrorStream(true).start()
+            val process = avrProcessBuilder("-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/", "-I${File(toolchain, "avr/include").absolutePath}", "-mmcu=" + (if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"), "-DF_CPU=8000000UL", "-std=gnu11", "-Os", "-fsyntax-only", source.absolutePath).redirectErrorStream(true).start()
             val output = process.inputStream.bufferedReader().readText()
             val code = process.waitFor()
             status.text = if (code == 0) "●  VERIFY PASSED" else "●  VERIFY FAILED"
