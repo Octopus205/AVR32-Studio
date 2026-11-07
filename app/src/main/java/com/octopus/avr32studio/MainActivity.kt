@@ -60,7 +60,7 @@ int main(void) {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        dark = getSharedPreferences("octo_settings", MODE_PRIVATE).getBoolean("dark", true)
+        dark = true // OctoAVR32A uses a fixed dark interface.
         restoreSession()
         buildUi()
         installAvrToolchain()
@@ -355,12 +355,6 @@ int main(void) {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val menu = label("☰", 25f, true, text()).apply {
-            gravity = Gravity.CENTER
-            setPadding(dp(10), dp(8), dp(14), dp(8))
-            setOnClickListener { showDrawer(it) }
-        }
-        toolbar.addView(menu)
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         brand.addView(label("OctoAVR32A", 19f, true, text()))
         brand.addView(label("AVR DEVELOPMENT STUDIO", 9f, true, muted()))
@@ -482,10 +476,65 @@ int main(void) {
         root.addView(outputCard)
         statusBar = label("ATmega32A  ·  8 MHz", 10f, true, muted()).apply { setPadding(dp(6), dp(8), dp(6), dp(2)) }
         root.addView(statusBar)
+        root.addView(bottomNavigation(), marginTop(5))
         setContentView(root)
         editor.textSize = getSharedPreferences("octo_settings", MODE_PRIVATE).getFloat("editor_font_size", if (compact) 12f else 14f)
         refreshStatusBar()
         highlight(editor.text)
+    }
+
+    private fun bottomNavigation(): LinearLayout {
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(4), dp(5), dp(4), dp(5))
+            background = bg(Color.rgb(17, 31, 49), 14, Color.rgb(43, 65, 91))
+        }
+        fun destination(icon: String, title: String, action: (View) -> Unit) {
+            val item = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                setPadding(dp(3), dp(4), dp(3), dp(4))
+                background = bg(Color.TRANSPARENT, 10)
+                setOnClickListener { action(this) }
+            }
+            item.addView(label(icon, 19f, true, Color.rgb(112, 190, 255)).apply { gravity = Gravity.CENTER })
+            item.addView(label(title, 9f, true, Color.rgb(184, 202, 224)).apply { gravity = Gravity.CENTER })
+            bar.addView(item, LinearLayout.LayoutParams(0, dp(48), 1f))
+        }
+        destination("⌨", "Editor") { editor.requestFocus() }
+        destination("▤", "Files") {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Project files")
+                .setItems(arrayOf("New C source", "Open source", "Examples Library", "Save As")) { _, which ->
+                    when (which) {
+                        0 -> createNewSource()
+                        1 -> openSource()
+                        2 -> showExamplesDialog()
+                        3 -> saveSourceAs()
+                    }
+                }.show()
+        }
+        destination("⚒", "Build") {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Build actions")
+                .setItems(arrayOf("Verify source", "Build firmware", "Export HEX", "Export ELF")) { _, which ->
+                    when (which) {
+                        0 -> verifySource()
+                        1 -> compile()
+                        2 -> exportArtifact(lastHexFile, "application/octet-stream", "firmware.hex")
+                        3 -> exportArtifact(lastElfFile, "application/octet-stream", "firmware.elf")
+                    }
+                }.show()
+        }
+        destination("▣", "Console") {
+            if (!consoleExpanded) toggleConsole()
+            else showConsolePage()
+        }
+        destination("•••", "More") { anchor -> showDrawer(anchor) }
+        return bar
     }
 
     private fun renderTabs() {
@@ -699,17 +748,12 @@ int main(void) {
         item(android.R.drawable.ic_menu_save, "Export ELF", "Export linked ELF firmware") { closeAnd { exportArtifact(lastElfFile, "application/octet-stream", "firmware.elf") } }
 
         section("APPLICATION")
-        item(android.R.drawable.ic_menu_manage, "Settings", "Appearance: Dark Navy / Light") {
+        item(android.R.drawable.ic_menu_manage, "Settings", "Dark interface · Editor preferences") {
             closeAnd {
                 android.app.AlertDialog.Builder(this)
-                    .setTitle("Appearance")
-                    .setSingleChoiceItems(arrayOf("Dark Navy", "Light"), if (dark) 0 else 1) { dialog, which ->
-                        sourceTabs.getOrNull(currentTabIndex)?.content = editor.text.toString()
-                        dark = which == 0
-                        getSharedPreferences("octo_settings", MODE_PRIVATE).edit().putBoolean("dark", dark).apply()
-                        dialog.dismiss()
-                        buildUi()
-                    }
+                    .setTitle("Settings")
+                    .setMessage("Appearance is fixed to Dark Mode. You can still customize the editor font size.")
+                    .setPositiveButton("Editor font size") { _, _ -> showFontSizeDialog() }
                     .setNegativeButton("Close", null).show()
             }
         }
