@@ -176,7 +176,6 @@ int main(void) {
             Pair("\\b(int|void|char|long|short|unsigned|volatile|const|return|while|for|if|else)\\b", Color.rgb(86, 174, 255)),
             Pair("\\b(#define|#include)\\b", Color.rgb(190, 140, 255)),
             Pair("\\b(DDRB|PORTB|PINA|DDRA|PORTA|PB[0-7]|PA[0-7]|F_CPU)\\b", Color.rgb(73, 205, 173)),
-            Pair("\\"[^\\"\\\\n]*\\"", Color.rgb(235, 185, 105)),
             Pair("//[^\\n]*", muted())
         )
         for ((pattern, color) in patterns) {
