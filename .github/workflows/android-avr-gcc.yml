@@ -29,6 +29,10 @@ jobs:
           tar -xf "$RUNNER_TEMP/gcc.tar.xz" -C "$RUNNER_TEMP"
           cd "$RUNNER_TEMP/gcc-7.3.0"
           ./contrib/download_prerequisites
+          # Bionic does not export glibc-only fread_unlocked on all API levels.
+          # GCC build-time generator gengtype can safely use portable fread.
+          grep -RIl "fread_unlocked" gcc libiberty 2>/dev/null | while read -r file; do sed -i "s/fread_unlocked/fread/g" "$file"; done
+          find gcc -name "*lex.c" -exec touch {} +
       - name: Configure and build AVR GCC driver for Android ARMv7
         shell: bash
         run: |
