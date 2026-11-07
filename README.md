@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/octoavr32a-logo.svg" alt="OctoAVR32A logo" width="180"/>
+  <img src="docs/octoavr32a-logo.svg" alt="OctoAVR32A minimalist octopus and microcontroller icon" width="180"/>
   <h1>OctoAVR32A</h1>
   <p><strong>A lightweight AVR C development environment for Android.</strong></p>
   <p>
