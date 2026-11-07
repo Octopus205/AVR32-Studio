@@ -10,10 +10,30 @@ android {
         applicationId 'com.octopus.avr32studio'
         minSdk 26
         targetSdk 28
-        versionCode 1
-        versionName '0.1.0'
+        versionCode 2
+        versionName '0.2.0'
     }
-    buildTypes { release { minifyEnabled false } }
+    signingConfigs {
+        persistent {
+            storeFile file(System.getenv('OCTO_KEYSTORE_PATH') ?: 'octo-upload.jks')
+            storePassword System.getenv('OCTO_KEYSTORE_PASSWORD') ?: ''
+            keyAlias 'octoavr'
+            keyPassword System.getenv('OCTO_KEYSTORE_PASSWORD') ?: ''
+        }
+    }
+    buildTypes {
+        debug {
+            if (System.getenv('OCTO_KEYSTORE_PATH') != null) {
+                signingConfig signingConfigs.persistent
+            }
+        }
+        release {
+            minifyEnabled false
+            if (System.getenv('OCTO_KEYSTORE_PATH') != null) {
+                signingConfig signingConfigs.persistent
+            }
+        }
+    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
