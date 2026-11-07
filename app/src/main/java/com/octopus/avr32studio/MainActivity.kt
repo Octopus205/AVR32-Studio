@@ -583,6 +583,8 @@ int main(void) {
                 val toolchain = File(filesDir, "toolchain")
                 runOnUiThread { log.text = "Compiling and linking AVR firmware...\\nThis may take a little while." }
 
+                runOnUiThread { log.text = "Starting AVR-GCC...\\nTarget: $mcu · Clock: 8 MHz" }
+                val gccOutput = File(dir, "gcc-build.log")
                 val p = avrProcessBuilder(
                     "-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/",
                     "-B${File(toolchain, "bin").absolutePath}/",
@@ -592,19 +594,38 @@ int main(void) {
                     "-L${File(toolchain, "avr/lib").absolutePath}",
                     "-mmcu=$mcu", "-DF_CPU=8000000UL", "-Os", "-std=gnu11",
                     source.absolutePath, "-o", elf.absolutePath
-                ).redirectErrorStream(true).start()
-                val messages = p.inputStream.bufferedReader().use { it.readText() }
-                val compileExit = p.waitFor()
+                ).redirectErrorStream(true).redirectOutput(gccOutput).start()
+                val compileFinished = p.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)
+                if (!compileFinished) {
+                    p.destroyForcibly()
+                    p.waitFor()
+                    publish("●  BUILD TIMEOUT", Color.RED,
+                        "avr-gcc did not finish within 120 seconds.\\nThe compiler was stopped to prevent an indefinite build.\\nCheck toolchain/runtime compatibility.\\n\\n" +
+                        (if (gccOutput.isFile) gccOutput.readText() else "No compiler output was produced."))
+                    return@Thread
+                }
+                val messages = if (gccOutput.isFile) gccOutput.readText() else ""
+                val compileExit = p.exitValue()
                 if (compileExit != 0) {
                     publish("●  BUILD FAILED", Color.RED, messages.ifBlank { "avr-gcc failed with exit code $compileExit" })
                     return@Thread
                 }
 
                 runOnUiThread { log.text = "Generating Intel HEX file..." }
+                val objcopyOutput = File(dir, "objcopy-build.log")
                 val q = ProcessBuilder(objcopy.absolutePath, "-O", "ihex", "-R", ".eeprom",
-                    elf.absolutePath, hex.absolutePath).redirectErrorStream(true).start()
-                val conversion = q.inputStream.bufferedReader().use { it.readText() }
-                val objcopyExit = q.waitFor()
+                    elf.absolutePath, hex.absolutePath).redirectErrorStream(true).redirectOutput(objcopyOutput).start()
+                val objcopyFinished = q.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)
+                if (!objcopyFinished) {
+                    q.destroyForcibly()
+                    q.waitFor()
+                    publish("●  HEX EXPORT TIMEOUT", Color.RED,
+                        "avr-objcopy did not finish within 30 seconds.\\n" +
+                        (if (objcopyOutput.isFile) objcopyOutput.readText() else "No objcopy output was produced."))
+                    return@Thread
+                }
+                val conversion = if (objcopyOutput.isFile) objcopyOutput.readText() else ""
+                val objcopyExit = q.exitValue()
                 if (objcopyExit != 0) {
                     publish("●  HEX EXPORT FAILED", Color.RED, messages + "\\n" + conversion)
                     return@Thread
