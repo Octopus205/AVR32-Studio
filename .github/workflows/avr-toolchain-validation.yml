@@ -1,0 +1,43 @@
+name: AVR toolchain validation (CI reference)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/avr-toolchain-validation.yml"
+      - "toolchain-tests/**"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install AVR toolchain on CI runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-avr binutils-avr avr-libc
+      - name: Compile ATmega32A and ATmega32 test firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cat > blink.c <<'EOF'
+          #define F_CPU 8000000UL
+          #include <avr/io.h>
+          int main(void) {
+              DDRB |= (1 << PB0);
+              while (1) { PORTB ^= (1 << PB0); }
+          }
+          EOF
+          for mcu in atmega32a atmega32; do
+            avr-gcc -mmcu="$mcu" -DF_CPU=8000000UL -Os -std=gnu11 blink.c -o "out/$mcu.elf"
+            avr-objcopy -O ihex -R .eeprom "out/$mcu.elf" "out/$mcu.hex"
+            test -s "out/$mcu.elf"
+            test -s "out/$mcu.hex"
+            avr-size "out/$mcu.elf"
+            echo "PASS: $mcu ELF and HEX generated"
+          done
+      - name: Upload reference firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AVR-reference-HEX-ELF
+          path: out/*
+          if-no-files-found: error
