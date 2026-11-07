@@ -19,8 +19,23 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.2'
-      # GitHub-hosted Ubuntu runners already provide Android SDK.
-      # Avoid setup-android here: its legacy "tools" package lookup fails.
+      # Pin MightyCore so Arduino support is reproducible.
+      - name: Fetch MightyCore source package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets
+          curl --fail --location --retry 3 \
+            https://github.com/MCUdude/MightyCore/archive/refs/tags/v3.1.0.zip \
+            --output /tmp/mightycore-v3.1.0.zip
+          unzip -q /tmp/mightycore-v3.1.0.zip -d /tmp
+          test -s /tmp/MightyCore-3.1.0/avr/boards.txt
+          grep -q 'mega32' /tmp/MightyCore-3.1.0/avr/boards.txt
+          mkdir -p /tmp/octo-mightycore
+          cp -R /tmp/MightyCore-3.1.0/avr /tmp/octo-mightycore/
+          cp /tmp/MightyCore-3.1.0/LICENSE* /tmp/octo-mightycore/ 2>/dev/null || true
+          (cd /tmp/octo-mightycore && zip -qr "$GITHUB_WORKSPACE/app/src/main/assets/mightycore-v3.1.0.zip" .)
+          test -s app/src/main/assets/mightycore-v3.1.0.zip
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
       - name: Upload APK
