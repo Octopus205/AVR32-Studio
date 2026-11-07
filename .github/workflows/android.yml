@@ -8,19 +8,24 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Set up Gradle 8.2
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.2'
-      - uses: android-actions/setup-android@v3
+      # GitHub-hosted Ubuntu runners already provide Android SDK.
+      # Avoid setup-android here: its legacy "tools" package lookup fails.
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
-          name: AVR32-Studio-debug
+          name: OctoAVR32A-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
