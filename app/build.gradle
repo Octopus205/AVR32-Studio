@@ -10,8 +10,8 @@ android {
         applicationId 'com.octopus.avr32studio'
         minSdk 26
         targetSdk 28
-        versionCode 2
-        versionName '0.2.0'
+        versionCode (project.findProperty('appVersionCode') ?: '2').toString().toInteger()
+        versionName (project.findProperty('appVersionName') ?: '0.2.0').toString()
     }
     signingConfigs {
         persistent {
