@@ -16,7 +16,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(14, 14, 14, 14) }
-        root.addView(TextView(this).apply { text = "AVR32 Studio"; textSize = 25f; setTypeface(null, Typeface.BOLD) })
+        root.addView(TextView(this).apply { text = "OctoAVR32A"; textSize = 25f; setTypeface(null, Typeface.BOLD) })
         root.addView(TextView(this).apply { text = "ATmega32A / ATmega32   •   8 MHz"; textSize = 13f })
         status = TextView(this).apply { text = "Ready"; setPadding(0, 10, 0, 10) }
         root.addView(status)
