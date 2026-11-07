@@ -13,7 +13,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bison flex texinfo wget xz-utils file
+          sudo apt-get install -y build-essential bison flex texinfo wget xz-utils file gcc-avr binutils-avr avr-libc
       - name: Install Android NDK r26d
         shell: bash
         run: |
@@ -58,12 +58,16 @@ jobs:
             --disable-libssp --disable-libcc1 --disable-shared --disable-threads \
             --disable-libstdcxx-pch --disable-libquadmath --disable-libgomp \
             --disable-libatomic --disable-libsanitizer --without-headers --with-newlib
-          make -j2 all-gcc
-          make install-gcc
+          # Native AVR GCC is used only to generate specs while cross-building the Android-hosted compiler.
+          make -j2 GCC_FOR_TARGET=avr-gcc all-gcc
+          make GCC_FOR_TARGET=avr-gcc install-gcc
           test -x "$RUNNER_TEMP/avr-gcc-prefix/bin/avr-gcc"
           test -x "$RUNNER_TEMP/avr-gcc-prefix/bin/avr-g++"
           file "$RUNNER_TEMP/avr-gcc-prefix/bin/avr-gcc"
           readelf -h "$RUNNER_TEMP/avr-gcc-prefix/bin/avr-gcc" | grep -E 'Class:|Machine:'
+          test -x "$RUNNER_TEMP/avr-gcc-prefix/libexec/gcc/avr/7.3.0/cc1"
+          file "$RUNNER_TEMP/avr-gcc-prefix/libexec/gcc/avr/7.3.0/cc1"
+          readelf -h "$RUNNER_TEMP/avr-gcc-prefix/libexec/gcc/avr/7.3.0/cc1" | grep -E "Class:|Machine:"
           mkdir -p "$GITHUB_WORKSPACE/output"
           cp -R "$RUNNER_TEMP/avr-gcc-prefix/." "$GITHUB_WORKSPACE/output/"
       - name: Upload Android ARMv7 AVR GCC
