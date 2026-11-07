@@ -49,7 +49,8 @@ jobs:
           set -euo pipefail
           mkdir -p app/src/main/assets/toolchain /tmp/avr-libc-unpacked
           cp -R /tmp/toolchain/. app/src/main/assets/toolchain/
-          cp -R /tmp/binutils/. app/src/main/assets/toolchain/
+          mkdir -p app/src/main/assets/toolchain/bin
+          cp /tmp/binutils/avr-* app/src/main/assets/toolchain/bin/
           tar -xzf /tmp/avr-libc/avr-libc-runtime.tar.gz -C /tmp/avr-libc-unpacked
           cp -R /tmp/avr-libc-unpacked/avr app/src/main/assets/toolchain/
           test -x app/src/main/assets/toolchain/bin/avr-gcc
