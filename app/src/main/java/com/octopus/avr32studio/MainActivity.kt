@@ -153,6 +153,7 @@ int main(void) {
         return ProcessBuilder(command).apply {
             environment()["GCC_EXEC_PREFIX"] = File(toolchain, "lib/gcc/").absolutePath + File.separator
             environment()["COMPILER_PATH"] = File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath
+            environment()["PATH"] = File(toolchain, "bin").absolutePath + File.pathSeparator + (environment()["PATH"] ?: "")
             environment()["LIBRARY_PATH"] = File(toolchain, "avr/lib").absolutePath
         }
     }
