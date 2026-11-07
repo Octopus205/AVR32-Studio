@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="app/src/main/res/drawable-nodpi/ic_launcher_original.png" alt="Original OctoAVR32A app icon" width="180"/>
+  <img src="docs/original-octopus-icon.svg" alt="Original OctoAVR32A app icon" width="180"/>
   <h1>OctoAVR32A</h1>
   <p><strong>A lightweight AVR C development environment for Android.</strong></p>
   <p>
