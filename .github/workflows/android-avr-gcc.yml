@@ -45,8 +45,9 @@ jobs:
           export CXX_FOR_BUILD=g++
           export AR="$TOOLCHAIN/bin/llvm-ar"
           export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
-          export CFLAGS="-O2 -fPIC"
-          export CXXFLAGS="-O2 -fPIC -std=gnu++14 -Wno-register"
+          export CFLAGS="-O2 -fPIE"
+          export LDFLAGS="-pie"
+          export CXXFLAGS="-O2 -fPIE -std=gnu++14 -Wno-register"
           mkdir -p "$RUNNER_TEMP/build-gcc" "$RUNNER_TEMP/avr-gcc-prefix"
           cd "$RUNNER_TEMP/build-gcc"
           "$RUNNER_TEMP/gcc-7.3.0/configure" \
