@@ -25,8 +25,11 @@ class MainActivity : Activity() {
     private lateinit var log: TextView
     private lateinit var status: TextView
     private lateinit var target: Spinner
-    private lateinit var themeButton: TextView
+    private lateinit var clock: Spinner
+    private lateinit var outputCard: LinearLayout
+    private lateinit var statusBar: TextView
     private var dark = true
+    private var consoleExpanded = false
     private var lastHexFile: File? = null
     private var lastElfFile: File? = null
     private var sourceExtension = ".c"
@@ -44,7 +47,7 @@ int main(void) {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        dark = getSharedPreferences("octo_settings", MODE_PRIVATE).getBoolean("dark", true)
         buildUi()
         installAvrToolchain()
         installMightyCoreSources()
@@ -181,16 +184,27 @@ int main(void) {
             if (stroke != null) setStroke(dp(1), stroke)
         }
 
-    private fun page() = if (dark) Color.rgb(8, 17, 35) else Color.rgb(244, 247, 252)
-    private fun panel() = if (dark) Color.rgb(17, 31, 55) else Color.WHITE
-    private fun text() = if (dark) Color.rgb(232, 241, 255) else Color.rgb(22, 39, 64)
-    private fun muted() = if (dark) Color.rgb(143, 164, 194) else Color.rgb(103, 119, 143)
-    private fun accent() = Color.rgb(28, 157, 238)
+    private fun page() = if (dark) Color.rgb(16, 24, 39) else Color.rgb(246, 248, 252)
+    private fun panel() = if (dark) Color.rgb(25, 38, 58) else Color.WHITE
+    private fun text() = if (dark) Color.rgb(213, 222, 234) else Color.rgb(28, 42, 61)
+    private fun muted() = if (dark) Color.rgb(143, 163, 188) else Color.rgb(105, 120, 140)
+    private fun accent() = Color.rgb(59, 130, 246)
+    private fun selectedClockHz(): Long = when (clock.selectedItem?.toString()) {
+        "1 MHz" -> 1000000L
+        "4 MHz" -> 4000000L
+        "16 MHz" -> 16000000L
+        else -> 8000000L
+    }
+    private fun refreshStatusBar() {
+        if (!::statusBar.isInitialized) return
+        statusBar.text = "${target.selectedItem ?: "ATmega32A"}  ·  ${selectedClockHz()/1000000} MHz"
+    }
 
     private fun buildUi() {
+        val compact = resources.configuration.screenWidthDp < 600
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setPadding(dp(if (compact) 8 else 16), dp(8), dp(if (compact) 8 else 16), dp(6))
             setBackgroundColor(page())
         }
 
@@ -218,14 +232,26 @@ int main(void) {
         root.addView(toolbar)
 
         val targetCard = card().apply { orientation = LinearLayout.VERTICAL }
-        val targetRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val targetRow = LinearLayout(this).apply { orientation = if (resources.configuration.screenWidthDp < 360) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         targetRow.addView(label("TARGET", 10f, true, muted()))
         target = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("ATmega32A", "ATmega32"))
             setSelection(0)
         }
-        targetRow.addView(target, LinearLayout.LayoutParams(0, dp(42), 1f))
-        targetRow.addView(label("8 MHz", 12f, true, accent()).apply { gravity = Gravity.CENTER; setPadding(dp(8), 0, dp(8), 0) })
+        targetRow.addView(target, LinearLayout.LayoutParams(if (resources.configuration.screenWidthDp < 360) ViewGroup.LayoutParams.MATCH_PARENT else 0, dp(42), if (resources.configuration.screenWidthDp < 360) 0f else 1f))
+        clock = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("1 MHz", "4 MHz", "8 MHz", "16 MHz"))
+            setSelection(2)
+            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) { refreshStatusBar() }
+            }
+        }
+        targetRow.addView(clock, LinearLayout.LayoutParams(if (resources.configuration.screenWidthDp < 360) ViewGroup.LayoutParams.MATCH_PARENT else dp(112), dp(42)))
+        target.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) { refreshStatusBar() }
+        }
         targetCard.addView(targetRow)
         root.addView(targetCard, marginTop(8))
 
@@ -251,7 +277,7 @@ int main(void) {
         editorCard.addView(gutter, LinearLayout.LayoutParams(dp(38), ViewGroup.LayoutParams.MATCH_PARENT))
         editor = EditText(this).apply {
             typeface = Typeface.MONOSPACE
-            textSize = 13f
+            textSize = if (compact) 12f else 14f
             setTextColor(text())
             setHintTextColor(muted())
             setHint("Write AVR C code...")
@@ -276,13 +302,13 @@ int main(void) {
         })
         root.addView(editorCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        // Console remains visible at the bottom; the drawer also opens it as a full page.
-        val consoleHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        consoleHeader.addView(label("CONSOLE", 10f, true, muted()), LinearLayout.LayoutParams(0, dp(28), 1f))
+        // Collapsible output keeps the editor spacious on phone and tablet.
+        val consoleHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; isClickable = true; setOnClickListener { toggleConsole() } }
+        consoleHeader.addView(label("OUTPUT  ▸", 10f, true, muted()), LinearLayout.LayoutParams(0, dp(32), 1f))
         status = label("● READY", 10f, true, Color.rgb(46, 190, 130))
         consoleHeader.addView(status)
         root.addView(consoleHeader, marginTop(6))
-        val outputCard = card()
+        outputCard = card().apply { visibility = View.GONE }
         log = label("Build messages will appear here.", 11f, false, muted()).apply {
             typeface = Typeface.MONOSPACE
             setPadding(dp(10), dp(8), dp(10), dp(8))
@@ -294,8 +320,16 @@ int main(void) {
         }
         outputCard.addView(logScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(104)))
         root.addView(outputCard)
+        statusBar = label("ATmega32A  ·  8 MHz", 10f, true, muted()).apply { setPadding(dp(6), dp(8), dp(6), dp(2)) }
+        root.addView(statusBar)
         setContentView(root)
+        refreshStatusBar()
         highlight(editor.text)
+    }
+
+    private fun toggleConsole() {
+        consoleExpanded = !consoleExpanded
+        outputCard.visibility = if (consoleExpanded) View.VISIBLE else View.GONE
     }
 
     private fun toolbarAction(symbol: String, description: String, action: () -> Unit) =
