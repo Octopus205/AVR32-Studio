@@ -584,61 +584,150 @@ int main(void) {
         }
 
     private fun showDrawer(anchor: View) {
+        // Fixed brand header + independently scrollable menu content.
         val drawer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(20), dp(16), dp(16))
             setBackgroundColor(panel())
         }
-        drawer.addView(label("OctoAVR32A", 21f, true, text()))
-        drawer.addView(label("PROJECT WORKSPACE", 9f, true, muted()).apply { setPadding(0, dp(4), 0, dp(18)) })
-        fun item(title: String, subtitle: String? = null, action: () -> Unit) {
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(20), dp(18), dp(16))
+            setBackgroundColor(if (dark) Color.rgb(18, 31, 49) else Color.rgb(235, 243, 253))
+        }
+        val brandRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val brandMark = TextView(this).apply {
+            text = "O"
+            textSize = 22f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = bg(accent(), 12)
+        }
+        brandRow.addView(brandMark, LinearLayout.LayoutParams(dp(42), dp(42)))
+        val brandText = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), 0, 0, 0)
+            addView(label("OctoAVR32A", 19f, true, text()))
+            addView(label("AVR DEVELOPMENT STUDIO", 9f, true, muted()))
+        }
+        brandRow.addView(brandText)
+        header.addView(brandRow)
+        header.addView(label("ATmega32A  ·  ATmega32", 10f, true, accent()).apply {
+            setPadding(0, dp(12), 0, 0)
+        })
+        drawer.addView(header)
+
+        val divider = View(this).apply {
+            setBackgroundColor(if (dark) Color.rgb(48, 66, 91) else Color.rgb(213, 224, 238))
+        }
+        drawer.addView(divider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+
+        val menuItems = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(18))
+        }
+        fun section(title: String) {
+            menuItems.addView(label(title, 10f, true, accent()).apply {
+                letterSpacing = 0.10f
+                setPadding(dp(5), dp(12), dp(5), dp(5))
+            })
+        }
+        fun item(iconRes: Int, title: String, subtitle: String? = null, action: () -> Unit) {
             val row = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(10), dp(11), dp(8), dp(11))
-                background = bg(if (dark) Color.rgb(23, 39, 63) else Color.rgb(246, 249, 253), 10)
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = dp(58)
+                setPadding(dp(10), dp(7), dp(8), dp(7))
+                background = bg(
+                    if (dark) Color.rgb(30, 47, 70) else Color.rgb(246, 249, 253),
+                    11,
+                    if (dark) Color.rgb(43, 63, 88) else Color.rgb(224, 232, 242)
+                )
+                isClickable = true
+                isFocusable = true
                 setOnClickListener { action() }
             }
-            row.addView(label(title, 14f, true, text()))
-            if (subtitle != null) row.addView(label(subtitle, 10f, false, muted()))
-            drawer.addView(row, marginTop(6))
+            val iconTile = FrameLayout(this).apply {
+                background = bg(if (dark) Color.rgb(22, 39, 61) else Color.rgb(231, 240, 251), 9)
+            }
+            val iconView = ImageView(this).apply {
+                setImageResource(iconRes)
+                setColorFilter(if (dark) Color.rgb(126, 190, 255) else Color.rgb(38, 105, 180))
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                setPadding(dp(5), dp(5), dp(5), dp(5))
+            }
+            iconTile.addView(iconView, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+            row.addView(iconTile, LinearLayout.LayoutParams(dp(38), dp(38)))
+            val labels = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(11), 0, 0, 0)
+                addView(label(title, 13f, true, text()))
+                if (subtitle != null) addView(label(subtitle, 10f, false, muted()))
+            }
+            row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            menuItems.addView(row, marginTop(7))
         }
+
         lateinit var popup: PopupWindow
-        popup = PopupWindow(drawer, dp(285), ViewGroup.LayoutParams.MATCH_PARENT, true).apply {
-            elevation = dp(18).toFloat()
+        popup = PopupWindow(drawer, dp(300), ViewGroup.LayoutParams.MATCH_PARENT, true).apply {
+            elevation = dp(20).toFloat()
             setBackgroundDrawable(bg(panel(), 0))
             isOutsideTouchable = true
         }
-        item("New C source", "Create a separate source tab") { popup.dismiss(); createNewSource() }
-        item("Examples", "Open ATmega32 practice examples") { popup.dismiss(); showExamplesDialog() }
-        item("Close current tab", "Close this source tab") { popup.dismiss(); closeTabAt(currentTabIndex) }
-        item("Editor font size", "Adjust code text size") { popup.dismiss(); showFontSizeDialog() }
-        item("Open source", "Open .c or .ino") { popup.dismiss(); openSource() }
-        item("Save As", "Save source file") { popup.dismiss(); saveSourceAs() }
-        item("Verify", "Check source syntax") { popup.dismiss(); verifySource() }
-        item("Build", "Generate firmware.elf and firmware.hex") { popup.dismiss(); compile() }
-        item("Console", "Open the full console page") { popup.dismiss(); showConsolePage() }
-        item("Export HEX", "Export Intel HEX") { popup.dismiss(); exportArtifact(lastHexFile, "application/octet-stream", "firmware.hex") }
-        item("Export ELF", "Export ELF file") { popup.dismiss(); exportArtifact(lastElfFile, "application/octet-stream", "firmware.elf") }
-        item("Settings", "Appearance: Dark Navy / Light") {
+        fun closeAnd(action: () -> Unit) {
             popup.dismiss()
-            android.app.AlertDialog.Builder(this)
-                .setTitle("Appearance")
-                .setSingleChoiceItems(arrayOf("Dark Navy", "Light"), if (dark) 0 else 1) { dialog, which ->
-                    sourceTabs.getOrNull(currentTabIndex)?.content = editor.text.toString()
-                    dark = which == 0
-                    getSharedPreferences("octo_settings", MODE_PRIVATE).edit().putBoolean("dark", dark).apply()
-                    dialog.dismiss()
-                    buildUi()
-                }
-                .setNegativeButton("Close", null).show()
+            action()
         }
-        item("About", "AVR compiler for Android") {
-            popup.dismiss()
-            android.app.AlertDialog.Builder(this)
-                .setTitle("About OctoAVR32A")
-                .setMessage("A focused AVR development environment for ATmega32A / ATmega32.\n\nOffline AVR-GCC toolchain · Verify · Build · HEX / ELF export.")
-                .setPositiveButton("Close", null).show()
+
+        section("PROJECT")
+        item(android.R.drawable.ic_menu_add, "New C source", "Create a new source tab") { closeAnd { createNewSource() } }
+        item(android.R.drawable.ic_menu_view, "Open source", "Open a .c or .ino file") { closeAnd { openSource() } }
+        item(android.R.drawable.ic_menu_save, "Save As", "Save the current source file") { closeAnd { saveSourceAs() } }
+
+        section("EDITOR")
+        item(android.R.drawable.ic_menu_agenda, "Examples Library", "ATmega32 practice examples") { closeAnd { showExamplesDialog() } }
+        item(android.R.drawable.ic_menu_close_clear_cancel, "Close current tab", "Close the active source tab") { closeAnd { closeTabAt(currentTabIndex) } }
+        item(android.R.drawable.ic_menu_edit, "Editor font size", "Adjust code text size") { closeAnd { showFontSizeDialog() } }
+        item(android.R.drawable.ic_menu_search, "Find & Replace", "Search or replace source text") { closeAnd { showSearchDialog() } }
+
+        section("BUILD")
+        item(android.R.drawable.ic_menu_search, "Verify", "Check source syntax without building") { closeAnd { verifySource() } }
+        item(android.R.drawable.ic_media_play, "Build Firmware", "Generate firmware.elf and firmware.hex") { closeAnd { compile() } }
+        item(android.R.drawable.ic_menu_recent_history, "Console", "View compiler output and diagnostics") { closeAnd { showConsolePage() } }
+        item(android.R.drawable.ic_menu_save, "Export HEX", "Export Intel HEX firmware") { closeAnd { exportArtifact(lastHexFile, "application/octet-stream", "firmware.hex") } }
+        item(android.R.drawable.ic_menu_save, "Export ELF", "Export linked ELF firmware") { closeAnd { exportArtifact(lastElfFile, "application/octet-stream", "firmware.elf") } }
+
+        section("APPLICATION")
+        item(android.R.drawable.ic_menu_manage, "Settings", "Appearance: Dark Navy / Light") {
+            closeAnd {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("Appearance")
+                    .setSingleChoiceItems(arrayOf("Dark Navy", "Light"), if (dark) 0 else 1) { dialog, which ->
+                        sourceTabs.getOrNull(currentTabIndex)?.content = editor.text.toString()
+                        dark = which == 0
+                        getSharedPreferences("octo_settings", MODE_PRIVATE).edit().putBoolean("dark", dark).apply()
+                        dialog.dismiss()
+                        buildUi()
+                    }
+                    .setNegativeButton("Close", null).show()
+            }
         }
+        item(android.R.drawable.ic_menu_info_details, "About", "About OctoAVR32A") {
+            closeAnd {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("About OctoAVR32A")
+                    .setMessage("A focused AVR development environment for ATmega32A / ATmega32.\n\nOffline AVR-GCC toolchain · Verify · Build · HEX / ELF export.")
+                    .setPositiveButton("Close", null).show()
+            }
+        }
+
+        val menuScroll = ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = true
+            addView(menuItems, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        drawer.addView(menuScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         popup.showAtLocation(root, Gravity.START or Gravity.TOP, 0, 0)
     }
 
