@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -17,6 +19,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import java.io.File
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.zip.ZipInputStream
 
 class MainActivity : Activity() {
@@ -32,13 +36,16 @@ class MainActivity : Activity() {
     private lateinit var tabsBar: LinearLayout
     private lateinit var filenameLabel: TextView
     private var dark = true
-    private data class SourceTab(var name: String, var content: String, var extension: String)
+    private data class SourceTab(var name: String, var content: String, var extension: String, var dirty: Boolean = false)
     private val sourceTabs = mutableListOf<SourceTab>()
     private var currentTabIndex = 0
     private var consoleExpanded = false
     private var lastHexFile: File? = null
     private var lastElfFile: File? = null
     private var sourceExtension = ".c"
+    private var loadingSource = false
+    private val sessionHandler = Handler(Looper.getMainLooper())
+    private val sessionSaveTask = Runnable { persistSessionNow() }
 
     private val codeSample = """#define F_CPU 8000000UL
 #include <avr/io.h>
@@ -54,13 +61,135 @@ int main(void) {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dark = getSharedPreferences("octo_settings", MODE_PRIVATE).getBoolean("dark", true)
-        sourceTabs.clear()
-        sourceTabs.add(SourceTab("main.c", codeSample, ".c"))
+        restoreSession()
         buildUi()
         installAvrToolchain()
         installMightyCoreSources()
     }
 
+
+
+    override fun onPause() {
+        persistSessionNow()
+        super.onPause()
+    }
+
+    private fun restoreSession() {
+        val prefs = getSharedPreferences("octo_settings", MODE_PRIVATE)
+        sourceTabs.clear()
+        try {
+            val saved = JSONArray(prefs.getString("session_tabs", "[]") ?: "[]")
+            for (i in 0 until saved.length()) {
+                val item = saved.optJSONObject(i) ?: continue
+                val ext = if (item.optString("extension", ".c") == ".ino") ".ino" else ".c"
+                sourceTabs.add(SourceTab(item.optString("name", "main.c"), item.optString("content", ""), ext, item.optBoolean("dirty", false)))
+            }
+        } catch (_: Exception) { sourceTabs.clear() }
+        if (sourceTabs.isEmpty()) sourceTabs.add(SourceTab("main.c", codeSample, ".c"))
+        currentTabIndex = prefs.getInt("session_current_tab", 0).coerceIn(0, sourceTabs.lastIndex)
+        sourceExtension = sourceTabs[currentTabIndex].extension
+    }
+
+    private fun scheduleSessionSave() {
+        sessionHandler.removeCallbacks(sessionSaveTask)
+        sessionHandler.postDelayed(sessionSaveTask, 500L)
+    }
+
+    private fun persistSessionNow() {
+        if (sourceTabs.isEmpty()) return
+        if (::editor.isInitialized) sourceTabs.getOrNull(currentTabIndex)?.content = editor.text.toString()
+        val tabs = JSONArray()
+        sourceTabs.forEach { tab ->
+            tabs.put(JSONObject().put("name", tab.name).put("content", tab.content)
+                .put("extension", tab.extension).put("dirty", tab.dirty))
+        }
+        val edit = getSharedPreferences("octo_settings", MODE_PRIVATE).edit()
+            .putString("session_tabs", tabs.toString())
+            .putInt("session_current_tab", currentTabIndex)
+        if (::target.isInitialized) edit.putInt("target_index", target.selectedItemPosition)
+        if (::clock.isInitialized) edit.putInt("clock_index", clock.selectedItemPosition)
+        edit.apply()
+    }
+
+    private fun createNewSource() {
+        val n = sourceTabs.count { it.name.startsWith("untitled") } + 1
+        addSourceTab("untitled$n.c", "#include <avr/io.h>\n\nint main(void) {\n    while (1) {\n    }\n}\n", ".c")
+        editor.requestFocus()
+        editor.setSelection(editor.text.length)
+    }
+
+    private fun showFontSizeDialog() {
+        val sizes = arrayOf("10", "11", "12", "13", "14", "16", "18", "20")
+        val current = editor.textSize / resources.displayMetrics.scaledDensity
+        val selected = sizes.indices.minBy { kotlin.math.abs(sizes[it].toFloat() - current) }
+        android.app.AlertDialog.Builder(this).setTitle("Editor font size")
+            .setSingleChoiceItems(sizes, selected) { dialog, which ->
+                editor.textSize = sizes[which].toFloat()
+                getSharedPreferences("octo_settings", MODE_PRIVATE).edit().putFloat("editor_font_size", sizes[which].toFloat()).apply()
+                dialog.dismiss()
+            }.setNegativeButton("Close", null).show()
+    }
+
+    private fun showExamplesDialog() {
+        val examples = linkedMapOf(
+            "GPIO Blink" to """#define F_CPU 8000000UL
+#include <avr/io.h>
+#include <util/delay.h>
+int main(void) {
+    DDRB |= (1 << PB0);
+    while (1) { PORTB ^= (1 << PB0); _delay_ms(500); }
+}
+""",
+            "Button + Pull-up" to """#include <avr/io.h>
+int main(void) {
+    DDRB |= (1 << PB0);
+    DDRD &= ~(1 << PD2);
+    PORTD |= (1 << PD2);
+    while (1) {
+        if (!(PIND & (1 << PD2))) PORTB |= (1 << PB0);
+        else PORTB &= ~(1 << PB0);
+    }
+}
+""",
+            "Timer1 CTC" to """#define F_CPU 8000000UL
+#include <avr/io.h>
+#include <avr/interrupt.h>
+ISR(TIMER1_COMPA_vect) { PORTB ^= (1 << PB0); }
+int main(void) {
+    DDRB |= (1 << PB0);
+    TCCR1B = (1 << WGM12) | (1 << CS12) | (1 << CS10);
+    OCR1A = 31249; TIMSK |= (1 << OCIE1A); sei();
+    while (1) {}
+}
+""",
+            "UART 9600" to """#define F_CPU 8000000UL
+#include <avr/io.h>
+void uart_init(void) { UBRRH=0; UBRRL=51; UCSRB=(1<<TXEN); UCSRC=(1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0); }
+void uart_tx(char c) { while (!(UCSRA & (1<<UDRE))) {} UDR=c; }
+int main(void) { uart_init(); while (1) { uart_tx('O'); uart_tx('K'); uart_tx('\\r'); uart_tx('\\n'); } }
+""",
+            "ADC0 Read" to """#include <avr/io.h>
+int main(void) {
+    ADMUX = (1 << REFS0);
+    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
+    while (1) { ADCSRA |= (1 << ADSC); while (ADCSRA & (1 << ADSC)) {} volatile unsigned int value = ADC; (void)value; }
+}
+""",
+            "SPI Master" to """#include <avr/io.h>
+int main(void) {
+    DDRB |= (1 << PB5) | (1 << PB7) | (1 << PB4);
+    SPCR = (1 << SPE) | (1 << MSTR) | (1 << SPR0);
+    while (1) { SPDR = 0x55; while (!(SPSR & (1 << SPIF))) {} volatile unsigned char received = SPDR; (void)received; }
+}
+"""
+        )
+        val names = examples.keys.toTypedArray()
+        android.app.AlertDialog.Builder(this).setTitle("ATmega32 examples")
+            .setItems(names) { _, which ->
+                val title = names[which]
+                addSourceTab(title.replace(Regex("[^A-Za-z0-9]+"), "_") + ".c", examples[title] ?: "", ".c")
+            }.setNegativeButton("Close", null).show()
+    }
 
     // Installs the pinned MightyCore source package bundled by the APK workflow.
     // This is the Arduino board/core source layer; it is not the AVR-GCC compiler.
@@ -249,15 +378,15 @@ int main(void) {
         targetRow.addView(label("TARGET", 10f, true, muted()))
         target = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("ATmega32A", "ATmega32"))
-            setSelection(0)
+            setSelection(getSharedPreferences("octo_settings", MODE_PRIVATE).getInt("target_index", 0).coerceIn(0, 1))
         }
         targetRow.addView(target, LinearLayout.LayoutParams(if (resources.configuration.screenWidthDp < 360) ViewGroup.LayoutParams.MATCH_PARENT else 0, dp(42), if (resources.configuration.screenWidthDp < 360) 0f else 1f))
         clock = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("1 MHz", "4 MHz", "8 MHz", "16 MHz"))
-            setSelection(2)
+            setSelection(getSharedPreferences("octo_settings", MODE_PRIVATE).getInt("clock_index", 2).coerceIn(0, 3))
             onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) { refreshStatusBar() }
+                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) { refreshStatusBar(); scheduleSessionSave() }
             }
         }
         targetRow.addView(clock, LinearLayout.LayoutParams(if (resources.configuration.screenWidthDp < 360) ViewGroup.LayoutParams.MATCH_PARENT else dp(112), dp(42)))
@@ -270,7 +399,7 @@ int main(void) {
 
         val editorHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         editorHeader.addView(label("EDITOR", 10f, true, muted()), LinearLayout.LayoutParams(0, dp(30), 1f))
-        filenameLabel = label(sourceTabs[currentTabIndex].name, 11f, true, accent()).apply {
+        filenameLabel = label((if (sourceTabs[currentTabIndex].dirty) "● " else "") + sourceTabs[currentTabIndex].name, 11f, true, accent()).apply {
             setPadding(dp(10), dp(5), dp(10), dp(5))
             background = bg(if (dark) Color.rgb(31, 54, 82) else Color.rgb(229, 239, 252), 8)
         }
@@ -316,6 +445,12 @@ int main(void) {
         editor.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                if (!loadingSource) {
+                    sourceTabs.getOrNull(currentTabIndex)?.dirty = true
+                    scheduleSessionSave()
+                    if (::filenameLabel.isInitialized) filenameLabel.text = "● " + (sourceTabs.getOrNull(currentTabIndex)?.name ?: "")
+                    if (::tabsBar.isInitialized) renderTabs()
+                }
                 val lines = (s?.count { it == '\n' } ?: 0) + 1
                 gutter.text = (1..lines).joinToString("\n")
                 sourceTabs.getOrNull(currentTabIndex)?.content = s?.toString() ?: ""
@@ -345,6 +480,7 @@ int main(void) {
         statusBar = label("ATmega32A  ·  8 MHz", 10f, true, muted()).apply { setPadding(dp(6), dp(8), dp(6), dp(2)) }
         root.addView(statusBar)
         setContentView(root)
+        editor.textSize = getSharedPreferences("octo_settings", MODE_PRIVATE).getFloat("editor_font_size", if (compact) 12f else 14f)
         refreshStatusBar()
         highlight(editor.text)
     }
@@ -354,7 +490,7 @@ int main(void) {
         tabsBar.removeAllViews()
         sourceTabs.forEachIndexed { index, tab ->
             val button = TextView(this).apply {
-                text = tab.name
+                text = (if (tab.dirty) "● " else "") + tab.name
                 textSize = 11f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(if (index == currentTabIndex) accent() else muted())
@@ -362,11 +498,15 @@ int main(void) {
                 background = bg(if (index == currentTabIndex) panel() else page(), 8)
                 setOnClickListener {
                     sourceTabs.getOrNull(currentTabIndex)?.content = editor.text.toString()
+                    scheduleSessionSave()
                     currentTabIndex = index
                     sourceExtension = sourceTabs[index].extension
+                    loadingSource = true
                     editor.setText(sourceTabs[index].content)
-                    filenameLabel.text = sourceTabs[index].name
+                    loadingSource = false
+                    filenameLabel.text = (if (sourceTabs[index].dirty) "● " else "") + sourceTabs[index].name
                     renderTabs()
+                    scheduleSessionSave()
                     refreshStatusBar()
                 }
             }
@@ -380,15 +520,46 @@ int main(void) {
         tabsBar.addView(add, LinearLayout.LayoutParams(dp(36), dp(34)))
     }
 
+
+    private fun closeTabAt(index: Int) {
+        if (sourceTabs.size <= 1) {
+            Toast.makeText(this, "At least one source tab must remain open.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (index !in sourceTabs.indices) return
+        val tab = sourceTabs[index]
+        val action = {
+            sourceTabs.removeAt(index)
+            if (index < currentTabIndex) currentTabIndex--
+            else if (index == currentTabIndex) currentTabIndex = currentTabIndex.coerceAtMost(sourceTabs.lastIndex)
+            sourceExtension = sourceTabs[currentTabIndex].extension
+            loadingSource = true
+            editor.setText(sourceTabs[currentTabIndex].content)
+            loadingSource = false
+            filenameLabel.text = (if (sourceTabs[currentTabIndex].dirty) "● " else "") + sourceTabs[currentTabIndex].name
+            renderTabs()
+            scheduleSessionSave()
+        }
+        if (tab.dirty) android.app.AlertDialog.Builder(this)
+            .setTitle("Close modified tab?")
+            .setMessage("Closing this tab discards its current session copy.")
+            .setPositiveButton("Close tab") { _, _ -> action() }
+            .setNegativeButton("Cancel", null).show()
+        else action()
+    }
+
     private fun addSourceTab(name: String, content: String, extension: String) {
         sourceTabs.getOrNull(currentTabIndex)?.content = editor.text.toString()
         sourceTabs.add(SourceTab(name, content, extension))
         currentTabIndex = sourceTabs.lastIndex
         sourceExtension = extension
+        loadingSource = true
         editor.setText(content)
-        filenameLabel.text = name
+        loadingSource = false
+        filenameLabel.text = (if (sourceTabs[currentTabIndex].dirty) "● " else "") + name
         renderTabs()
         refreshStatusBar()
+        scheduleSessionSave()
     }
 
     private fun toggleConsole() {
@@ -434,11 +605,10 @@ int main(void) {
             setBackgroundDrawable(bg(panel(), 0))
             isOutsideTouchable = true
         }
-        item("New / Reset source", "Start with the AVR example") {
-            popup.dismiss()
-            editor.setText(codeSample)
-            sourceExtension = ".c"
-        }
+        item("New C source", "Create a separate source tab") { popup.dismiss(); createNewSource() }
+        item("Examples", "Open ATmega32 practice examples") { popup.dismiss(); showExamplesDialog() }
+        item("Close current tab", "Close this source tab") { popup.dismiss(); closeTabAt(currentTabIndex) }
+        item("Editor font size", "Adjust code text size") { popup.dismiss(); showFontSizeDialog() }
         item("Open source", "Open .c or .ino") { popup.dismiss(); openSource() }
         item("Save As", "Save source file") { popup.dismiss(); saveSourceAs() }
         item("Verify", "Check source syntax") { popup.dismiss(); verifySource() }
@@ -497,22 +667,34 @@ int main(void) {
     }
 
     private fun showSearchDialog() {
-        val query = EditText(this).apply { hint = "Find text in source" }
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Search in editor")
-            .setView(query)
-            .setPositiveButton("Find") { _, _ ->
+        val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(8), dp(18), 0) }
+        val query = EditText(this).apply { hint = "Find text"; singleLine = true }
+        val replacement = EditText(this).apply { hint = "Replace with (optional)"; singleLine = true }
+        panel.addView(query); panel.addView(replacement)
+        val dialog = android.app.AlertDialog.Builder(this).setTitle("Find / Replace")
+            .setView(panel).setPositiveButton("Find next", null)
+            .setNeutralButton("Replace all", null).setNegativeButton("Close", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val term = query.text.toString()
                 if (term.isNotEmpty()) {
-                    val index = editor.text.toString().indexOf(term, ignoreCase = true)
-                    if (index >= 0) {
-                        editor.requestFocus()
-                        editor.setSelection(index, index + term.length)
-                    } else Toast.makeText(this, "Text not found.", Toast.LENGTH_SHORT).show()
+                    val source = editor.text.toString()
+                    val start = editor.selectionEnd.coerceAtLeast(0).coerceAtMost(source.length)
+                    var index = source.indexOf(term, start, true)
+                    if (index < 0) index = source.indexOf(term, 0, true)
+                    if (index >= 0) { editor.requestFocus(); editor.setSelection(index, index + term.length) }
+                    else Toast.makeText(this, "Text not found.", Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                val term = query.text.toString()
+                if (term.isNotEmpty()) {
+                    editor.setText(editor.text.toString().replace(term, replacement.text.toString(), ignoreCase = true))
+                    Toast.makeText(this, "Replace all completed.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun smallAction(value: String, color: Int, action: () -> Unit) = TextView(this).apply {
@@ -564,6 +746,9 @@ int main(void) {
             when (requestCode) {
                 4101 -> {
                     contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(editor.text.toString()) }
+                    sourceTabs.getOrNull(currentTabIndex)?.apply { content = editor.text.toString(); dirty = false }
+                    filenameLabel.text = sourceTabs.getOrNull(currentTabIndex)?.name ?: "main.c"
+                    renderTabs(); persistSessionNow()
                     Toast.makeText(this, "Source saved.", Toast.LENGTH_SHORT).show()
                 }
                 4102 -> {
@@ -589,37 +774,59 @@ int main(void) {
     }
 
     private fun verifySource() {
+        if (buildInProgress) { Toast.makeText(this, "Another compiler task is already running.", Toast.LENGTH_SHORT).show(); return }
         val gcc = File(filesDir, "toolchain/bin/avr-gcc")
         if (!gcc.isFile) {
-            status.text = "●  COMPILER NOT INSTALLED"
-            statusBar.text = status.text.toString()
+            status.text = "●  COMPILER NOT INSTALLED"; statusBar.text = status.text.toString()
             status.setTextColor(Color.rgb(238, 165, 65))
             log.text = "Verification cannot run yet. The AVR-GCC ARM 32-bit toolchain is not bundled in this build. No syntax-check result is being claimed."
             return
         }
         if (sourceExtension == ".ino") {
-            status.text = "●  ARDUINO CORE REQUIRED"
-            statusBar.text = status.text.toString()
+            status.text = "●  ARDUINO CORE REQUIRED"; statusBar.text = status.text.toString()
             status.setTextColor(Color.rgb(238, 165, 65))
             log.text = "Arduino .ino verification requires Arduino AVR Core and the sketch preprocessor, which are not integrated yet."
             return
         }
-        val dir = File(filesDir, "projects/verify").apply { mkdirs() }
-        val source = File(dir, "verify.c")
+        buildInProgress = true
         val selectedHz = selectedClockHz()
-        source.writeText(clockDefine(editor.text.toString(), selectedHz))
-        try {
-            val toolchain = File(filesDir, "toolchain")
-            val process = avrProcessBuilder("-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/", "-I${File(toolchain, "avr/include").absolutePath}", "-mmcu=" + (if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"), "-DF_CPU=${selectedHz}UL", "-std=gnu11", "-Os", "-fsyntax-only", source.absolutePath).redirectErrorStream(true).start()
-            val output = process.inputStream.bufferedReader().readText()
-            val code = process.waitFor()
-            status.text = if (code == 0) "●  VERIFY PASSED" else "●  VERIFY FAILED"
-            statusBar.text = "${status.text}  ·  ${selectedHz/1000000} MHz"
-            status.setTextColor(if (code == 0) Color.rgb(46, 190, 130) else Color.RED)
-            log.text = if (output.isBlank()) "No compiler errors found." else output
-        } catch (e: Exception) {
-            status.text = "●  VERIFY ERROR"; statusBar.text = status.text.toString(); status.setTextColor(Color.RED); log.text = e.toString()
-        }
+        val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
+        val sourceText = clockDefine(editor.text.toString(), selectedHz)
+        status.text = "●  VERIFY RUNNING"
+        statusBar.text = "\${status.text}  ·  \${selectedHz/1000000} MHz"
+        status.setTextColor(accent()); log.text = "Checking source in background..."
+        Thread {
+            try {
+                val dir = File(filesDir, "projects/verify").apply { mkdirs() }
+                val source = File(dir, "verify.c"); source.writeText(sourceText)
+                val outputFile = File(dir, "verify-output.log")
+                val toolchain = File(filesDir, "toolchain")
+                val process = avrProcessBuilder(
+                    "-B\${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/",
+                    "-I\${File(toolchain, "avr/include").absolutePath}",
+                    "-mmcu=$mcu", "-DF_CPU=\${selectedHz}UL", "-std=gnu11", "-Os",
+                    "-fsyntax-only", source.absolutePath
+                ).redirectErrorStream(true).redirectOutput(outputFile).start()
+                if (!process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) {
+                    process.destroyForcibly(); process.waitFor()
+                    throw java.util.concurrent.TimeoutException("Verify timed out after 30 seconds.")
+                }
+                val output = if (outputFile.isFile) outputFile.readText() else ""
+                val code = process.exitValue()
+                runOnUiThread {
+                    status.text = if (code == 0) "●  VERIFY PASSED" else "●  VERIFY FAILED"
+                    statusBar.text = "\${status.text}  ·  \${selectedHz/1000000} MHz"
+                    status.setTextColor(if (code == 0) Color.rgb(46, 190, 130) else Color.RED)
+                    log.text = if (output.isBlank()) "No compiler errors found." else output
+                    buildInProgress = false
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    status.text = "●  VERIFY ERROR"; statusBar.text = status.text.toString()
+                    status.setTextColor(Color.RED); log.text = e.toString(); buildInProgress = false
+                }
+            }
+        }.start()
     }
 
     private fun label(value: String, size: Float, bold: Boolean, color: Int) = TextView(this).apply {
