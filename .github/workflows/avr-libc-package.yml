@@ -18,21 +18,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p package/include package/lib
-          cp -R /usr/lib/avr/include/. package/include/
-          find /usr/lib/avr/lib -type f -name '*.a' -exec cp --parents {} package/ \;
-          test -s package/include/avr/io.h
-          test -n "$(find package -name 'libc.a' -o -name 'libm.a')"
-          avr-gcc --version
-          avr-gcc -mmcu=atmega32 -x c -c -o /tmp/avr-libc-check.o - <<'EOF'
+          mkdir -p package/avr/include package/avr/lib output
+          cp -R /usr/lib/avr/include/. package/avr/include/
+          cp -R /usr/lib/avr/lib/. package/avr/lib/
+          test -s package/avr/include/avr/io.h
+          test -n "$(find package/avr/lib -type f -name 'libc.a' -o -name 'libm.a')"
+          cat > /tmp/libc-check.c <<'EOF'
+          #define F_CPU 8000000UL
           #include <avr/io.h>
           #include <util/delay.h>
-          #define F_CPU 8000000UL
           int main(void) { DDRB |= _BV(PB0); _delay_ms(1); return 0; }
           EOF
-          mkdir -p output
-          cp -R package/. output/
-          tar -czf output/avr-libc-runtime.tar.gz -C output include lib
+          avr-gcc -mmcu=atmega32 -Os -DF_CPU=8000000UL -c /tmp/libc-check.c -o /tmp/libc-check.o
+          avr-gcc -mmcu=atmega32 /tmp/libc-check.o -o /tmp/libc-check.elf
+          avr-objcopy -O ihex -R .eeprom /tmp/libc-check.elf /tmp/libc-check.hex
+          test -s /tmp/libc-check.hex
+          tar -czf output/avr-libc-runtime.tar.gz -C package avr
+          tar -tzf output/avr-libc-runtime.tar.gz | head -30
       - name: Upload AVR Libc runtime
         uses: actions/upload-artifact@v4
         with:
