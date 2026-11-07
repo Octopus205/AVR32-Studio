@@ -654,7 +654,7 @@ int main(void) {
                 val objcopyOutput = File(dir, "objcopy-build.log")
                 val objcopyStage = runBuildStage(
                     "Stage 3/3: generating Intel HEX file...",
-                    listOf(objcopy.absolutePath, "-O", "ihex", "-R", ".eeprom",
+                    listOf("-O", "ihex", "-R", ".eeprom",
                         elf.absolutePath, hex.absolutePath),
                     30L,
                     objcopyOutput,
