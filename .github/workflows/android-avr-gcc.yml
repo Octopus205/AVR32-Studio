@@ -57,10 +57,13 @@ jobs:
             --enable-languages=c,c++ --disable-nls --disable-bootstrap \
             --disable-libssp --disable-libcc1 --disable-shared --disable-threads \
             --disable-libstdcxx-pch --disable-libquadmath --disable-libgomp \
-            --disable-libatomic --disable-libsanitizer --without-headers --with-newlib
+            --disable-libatomic --disable-libsanitizer --without-headers --with-newlib \\
+            --with-as=/usr/bin/avr-as --with-ld=/usr/bin/avr-ld
           # Native AVR GCC is used only to generate specs while cross-building the Android-hosted compiler.
           make -j2 GCC_FOR_TARGET=avr-gcc all-gcc
           make GCC_FOR_TARGET=avr-gcc install-gcc
+          make -j2 GCC_FOR_TARGET=avr-gcc all-target-libgcc
+          make GCC_FOR_TARGET=avr-gcc install-target-libgcc
           test -x "$RUNNER_TEMP/avr-gcc-prefix/bin/avr-gcc"
           test -x "$RUNNER_TEMP/avr-gcc-prefix/bin/avr-g++"
           file "$RUNNER_TEMP/avr-gcc-prefix/bin/avr-gcc"
