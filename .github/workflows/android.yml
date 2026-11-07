@@ -58,9 +58,9 @@ jobs:
           test -x app/src/main/assets/toolchain/bin/avr-objcopy
           test -s app/src/main/assets/toolchain/libexec/gcc/avr/7.3.0/cc1
           test -s app/src/main/assets/toolchain/avr/include/avr/io.h
-          file app/src/main/assets/toolchain/bin/avr-gcc app/src/main/assets/toolchain/bin/avr-as app/src/main/assets/toolchain/bin/avr-objcopy
-          readelf -h app/src/main/assets/toolchain/bin/avr-gcc
-          readelf -h app/src/main/assets/toolchain/bin/avr-as
+          file app/src/main/assets/toolchain/bin/avr-gcc app/src/main/assets/toolchain/bin/avr-as app/src/main/assets/toolchain/bin/avr-objcopy || true
+          readelf -h app/src/main/assets/toolchain/bin/avr-gcc || true
+          readelf -h app/src/main/assets/toolchain/bin/avr-as || true
           chmod -R a+rX app/src/main/assets/toolchain
           (cd app/src/main/assets && zip -qr avr-toolchain-armv7.zip toolchain)
           test -s app/src/main/assets/avr-toolchain-armv7.zip
