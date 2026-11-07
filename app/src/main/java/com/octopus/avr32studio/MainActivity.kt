@@ -284,7 +284,14 @@ int main(void) {
         root.addView(outputCard)
         root.addView(label("OctoAVR32A  •  ATmega family only", 9f, false, muted()).apply { gravity = Gravity.CENTER }, marginTop(8))
 
-        setContentView(root)
+        val pageScroll = ScrollView(this).apply {
+            isFillViewport = true
+            addView(root, ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+        }
+        setContentView(pageScroll)
         highlight(editor.text)
     }
 
