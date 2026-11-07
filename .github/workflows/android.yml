@@ -4,6 +4,11 @@ on:
     workflows: ["Build AVR-GCC for Android ARMv7"]
     types: [completed]
     branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - 'app/src/main/java/com/octopus/avr32studio/MainActivity.kt'
+      - '.github/workflows/android.yml'
 
 permissions:
   actions: read
@@ -11,7 +16,7 @@ permissions:
 
 jobs:
   build:
-    if: github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -31,7 +36,7 @@ jobs:
           name: avr-gcc-android-armv7-api26
           path: /tmp/toolchain
           repository: Octopus205/AVR32-Studio
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event.workflow_run.id || 42380446258 }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download Android ARMv7 AVR Binutils
         uses: actions/download-artifact@v4
