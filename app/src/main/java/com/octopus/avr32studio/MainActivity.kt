@@ -120,6 +120,22 @@ int main(void) {
         editor.setSelection(editor.text.length)
     }
 
+    private fun showOptimizationDialog() {
+        val options = arrayOf("Size optimized (-Os)", "No optimization (-O0)", "Optimize (-O1)", "More optimization (-O2)")
+        val values = arrayOf("-Os", "-O0", "-O1", "-O2")
+        val prefs = getSharedPreferences("octo_settings", MODE_PRIVATE)
+        val selected = values.indexOf(optimizationLevel()).coerceAtLeast(0)
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Compiler optimization")
+            .setSingleChoiceItems(options, selected) { dialog, which ->
+                prefs.edit().putString("optimization_level", values[which]).apply()
+                dialog.dismiss()
+                Toast.makeText(this, "Optimization set to ${values[which]}", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     private fun showFontSizeDialog() {
         val sizes = arrayOf("10", "11", "12", "13", "14", "16", "18", "20")
         val current = editor.textSize / resources.displayMetrics.scaledDensity
@@ -804,8 +820,9 @@ int main(void) {
             closeAnd {
                 android.app.AlertDialog.Builder(this)
                     .setTitle("Settings")
-                    .setMessage("Appearance is fixed to Dark Mode. You can still customize the editor font size.")
+                    .setMessage("Appearance is fixed to Dark Mode. Customize editor font size and compiler optimization.")
                     .setPositiveButton("Editor font size") { _, _ -> showFontSizeDialog() }
+                    .setNeutralButton("Optimization") { _, _ -> showOptimizationDialog() }
                     .setNegativeButton("Close", null).show()
             }
         }
