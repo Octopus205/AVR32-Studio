@@ -65,8 +65,19 @@ int main(void) {
         dark = true // OctoAVR32A uses a fixed dark interface.
         restoreSession()
         buildUi()
-        installAvrToolchain()
-        installMightyCoreSources()
+        status.text = "●  INSTALLING TOOLCHAIN"
+        statusBar.text = "Preparing offline compiler and board sources..."
+        Thread {
+            installAvrToolchain()
+            installMightyCoreSources()
+            runOnUiThread {
+                val ready = File(filesDir, "toolchain/bin/avr-gcc").canExecute() &&
+                    File(filesDir, "toolchain/bin/avr-objcopy").canExecute()
+                status.text = if (ready) "●  TOOLCHAIN READY" else "●  TOOLCHAIN INSTALL FAILED"
+                statusBar.text = if (ready) "AVR-GCC ready · ${selectedClockHz()/1000000} MHz" else "Compiler installation needs attention"
+                status.setTextColor(if (ready) accent() else Color.rgb(238, 165, 65))
+            }
+        }.start()
     }
 
 
@@ -221,12 +232,9 @@ int main(void) {
         try {
             destination.deleteRecursively()
             destination.mkdirs()
-            val archive = File(cacheDir, "mightycore-v3.1.0.zip")
-            assets.open("mightycore-v3.1.0.zip").use { input ->
-                archive.outputStream().use { output -> input.copyTo(output) }
-            }
             val root = destination.canonicalFile
-            ZipInputStream(archive.inputStream().buffered()).use { zip ->
+            assets.open("mightycore-v3.1.0.zip").use { asset ->
+            ZipInputStream(asset.buffered()).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
                     val out = File(destination, entry.name).canonicalFile
@@ -241,7 +249,7 @@ int main(void) {
                     entry = zip.nextEntry
                 }
             }
-            archive.delete()
+            }
             if (!File(destination, "avr/boards.txt").isFile) {
                 throw IllegalStateException("MightyCore board definitions are missing")
             }
@@ -266,12 +274,9 @@ int main(void) {
         try {
             destination.deleteRecursively()
             destination.mkdirs()
-            val archive = File(cacheDir, "avr-toolchain-armv7.zip")
-            assets.open("avr-toolchain-armv7.zip").use { input ->
-                archive.outputStream().use { output -> input.copyTo(output) }
-            }
             val root = destination.canonicalFile
-            ZipInputStream(archive.inputStream().buffered()).use { zip ->
+            assets.open("avr-toolchain-armv7.zip").use { asset ->
+            ZipInputStream(asset.buffered()).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
                     val relative = entry.name.removePrefix("toolchain/")
@@ -292,7 +297,7 @@ int main(void) {
                     entry = zip.nextEntry
                 }
             }
-            archive.delete()
+            }
             val gcc = File(destination, "bin/avr-gcc")
             val objcopy = File(destination, "bin/avr-objcopy")
             val cc1 = File(destination, "libexec/gcc/avr/7.3.0/cc1")
@@ -304,11 +309,11 @@ int main(void) {
             objcopy.setExecutable(true, false)
             cc1.setExecutable(true, false)
             marker.writeText("Octo AVR ARMv7 toolchain package v4")
-            log.text = "AVR toolchain installed. Compiler runtime checks will run when Verify/Build is selected."
+            runOnUiThread { log.text = "AVR toolchain installed. Compiler runtime checks will run when Verify/Build is selected." }
         } catch (e: Exception) {
             destination.deleteRecursively()
             android.util.Log.e("OctoAVR32A", "AVR toolchain installation failed", e)
-            log.text = "AVR toolchain installation failed: ${e.message}"
+            runOnUiThread { log.text = "AVR toolchain installation failed: ${e.message}" }
         }
     }
 
