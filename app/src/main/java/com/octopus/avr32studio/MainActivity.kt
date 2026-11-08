@@ -19,6 +19,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import java.io.File
+import java.security.MessageDigest
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.zip.ZipInputStream
@@ -42,6 +43,7 @@ class MainActivity : Activity() {
     private var consoleExpanded = false
     private var lastHexFile: File? = null
     private var lastElfFile: File? = null
+    private var lastBuiltSourceHash: String? = null
     private var sourceExtension = ".c"
     private var loadingSource = false
     private val sessionHandler = Handler(Looper.getMainLooper())
@@ -63,8 +65,19 @@ int main(void) {
         dark = true // OctoAVR32A uses a fixed dark interface.
         restoreSession()
         buildUi()
-        installAvrToolchain()
-        installMightyCoreSources()
+        status.text = "●  INSTALLING TOOLCHAIN"
+        statusBar.text = "Preparing offline compiler and board sources..."
+        Thread {
+            installAvrToolchain()
+            installMightyCoreSources()
+            runOnUiThread {
+                val ready = File(filesDir, "toolchain/bin/avr-gcc").canExecute() &&
+                    File(filesDir, "toolchain/bin/avr-objcopy").canExecute()
+                status.text = if (ready) "●  TOOLCHAIN READY" else "●  TOOLCHAIN INSTALL FAILED"
+                statusBar.text = if (ready) "AVR-GCC ready · ${selectedClockHz()/1000000} MHz" else "Compiler installation needs attention"
+                status.setTextColor(if (ready) accent() else Color.rgb(238, 165, 65))
+            }
+        }.start()
     }
 
 
@@ -118,6 +131,22 @@ int main(void) {
         editor.setSelection(editor.text.length)
     }
 
+    private fun showOptimizationDialog() {
+        val options = arrayOf("Size optimized (-Os)", "No optimization (-O0)", "Optimize (-O1)", "More optimization (-O2)")
+        val values = arrayOf("-Os", "-O0", "-O1", "-O2")
+        val prefs = getSharedPreferences("octo_settings", MODE_PRIVATE)
+        val selected = values.indexOf(optimizationLevel()).coerceAtLeast(0)
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Compiler optimization")
+            .setSingleChoiceItems(options, selected) { dialog, which ->
+                prefs.edit().putString("optimization_level", values[which]).apply()
+                dialog.dismiss()
+                Toast.makeText(this, "Optimization set to ${values[which]}", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     private fun showFontSizeDialog() {
         val sizes = arrayOf("10", "11", "12", "13", "14", "16", "18", "20")
         val current = editor.textSize / resources.displayMetrics.scaledDensity
@@ -157,8 +186,11 @@ int main(void) {
 ISR(TIMER1_COMPA_vect) { PORTB ^= (1 << PB0); }
 int main(void) {
     DDRB |= (1 << PB0);
-    TCCR1B = (1 << WGM12) | (1 << CS12) | (1 << CS10);
-    OCR1A = 31249; TIMSK |= (1 << OCIE1A); TCCR1B = (1 << WGM12) | (1 << CS12); sei();
+    // CTC mode, prescaler 256: OCR1A=31249 gives a 1 Hz interrupt at 8 MHz.
+    TCCR1B = (1 << WGM12) | (1 << CS12);
+    OCR1A = 31249;
+    TIMSK |= (1 << OCIE1A);
+    sei();
     while (1) {}
 }
 """,
@@ -166,7 +198,7 @@ int main(void) {
 #include <avr/io.h>
 void uart_init(void) { UBRRH=0; UBRRL=51; UCSRB=(1<<TXEN); UCSRC=(1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0); }
 void uart_tx(char c) { while (!(UCSRA & (1<<UDRE))) {} UDR=c; }
-int main(void) { uart_init(); while (1) { uart_tx('O'); uart_tx('K'); uart_tx('\\r'); uart_tx('\\n'); } }
+int main(void) { uart_init(); while (1) { uart_tx('O'); uart_tx('K'); uart_tx('\r'); uart_tx('\n'); } }
 """,
             "ADC0 Read" to """#include <avr/io.h>
 int main(void) {
@@ -200,12 +232,9 @@ int main(void) {
         try {
             destination.deleteRecursively()
             destination.mkdirs()
-            val archive = File(cacheDir, "mightycore-v3.1.0.zip")
-            assets.open("mightycore-v3.1.0.zip").use { input ->
-                archive.outputStream().use { output -> input.copyTo(output) }
-            }
             val root = destination.canonicalFile
-            ZipInputStream(archive.inputStream().buffered()).use { zip ->
+            assets.open("mightycore-v3.1.0.zip").use { asset ->
+            ZipInputStream(asset.buffered()).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
                     val out = File(destination, entry.name).canonicalFile
@@ -220,7 +249,7 @@ int main(void) {
                     entry = zip.nextEntry
                 }
             }
-            archive.delete()
+            }
             if (!File(destination, "avr/boards.txt").isFile) {
                 throw IllegalStateException("MightyCore board definitions are missing")
             }
@@ -245,12 +274,9 @@ int main(void) {
         try {
             destination.deleteRecursively()
             destination.mkdirs()
-            val archive = File(cacheDir, "avr-toolchain-armv7.zip")
-            assets.open("avr-toolchain-armv7.zip").use { input ->
-                archive.outputStream().use { output -> input.copyTo(output) }
-            }
             val root = destination.canonicalFile
-            ZipInputStream(archive.inputStream().buffered()).use { zip ->
+            assets.open("avr-toolchain-armv7.zip").use { asset ->
+            ZipInputStream(asset.buffered()).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
                     val relative = entry.name.removePrefix("toolchain/")
@@ -271,7 +297,7 @@ int main(void) {
                     entry = zip.nextEntry
                 }
             }
-            archive.delete()
+            }
             val gcc = File(destination, "bin/avr-gcc")
             val objcopy = File(destination, "bin/avr-objcopy")
             val cc1 = File(destination, "libexec/gcc/avr/7.3.0/cc1")
@@ -283,11 +309,11 @@ int main(void) {
             objcopy.setExecutable(true, false)
             cc1.setExecutable(true, false)
             marker.writeText("Octo AVR ARMv7 toolchain package v4")
-            log.text = "AVR toolchain installed. Compiler runtime checks will run when Verify/Build is selected."
+            runOnUiThread { log.text = "AVR toolchain installed. Compiler runtime checks will run when Verify/Build is selected." }
         } catch (e: Exception) {
             destination.deleteRecursively()
             android.util.Log.e("OctoAVR32A", "AVR toolchain installation failed", e)
-            log.text = "AVR toolchain installation failed: ${e.message}"
+            runOnUiThread { log.text = "AVR toolchain installation failed: ${e.message}" }
         }
     }
 
@@ -327,11 +353,25 @@ int main(void) {
     private fun text() = if (dark) Color.rgb(232, 239, 236) else Color.rgb(28, 42, 37)
     private fun muted() = if (dark) Color.rgb(157, 171, 165) else Color.rgb(105, 120, 112)
     private fun accent() = Color.rgb(82, 214, 176)
-    private fun clockDefine(source: String, hz: Long = selectedClockHz()): String {
-        val definition = "#define F_CPU ${hz}UL"
-        val pattern = Regex("(?m)^\\s*#\\s*define\\s+F_CPU\\s+[^\\r\\n]+")
-        return if (pattern.containsMatchIn(source)) pattern.replace(source, definition) else definition + "\n" + source
+    private fun optimizationLevel(): String {
+        val value = getSharedPreferences("octo_settings", MODE_PRIVATE)
+            .getString("optimization_level", "-Os") ?: "-Os"
+        return if (value in setOf("-O0", "-O1", "-Os", "-O2")) value else "-Os"
     }
+
+    private fun fCpuMismatchWarning(source: String, hz: Long): String? {
+        val match = Regex("(?m)^\\s*#\\s*define\\s+F_CPU\\s+([0-9]+)(?:UL|LU|U|L)?\\s*$").find(source)
+        val declared = match?.groupValues?.getOrNull(1)?.toLongOrNull() ?: return null
+        return if (declared != hz) {
+            "Warning: source defines F_CPU as ${declared} Hz, while the selected clock is ${hz} Hz. The source definition was left unchanged.\n"
+        } else null
+    }
+
+    private fun sourceHash(source: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(source.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
     private fun selectedClockHz(): Long = when (clock.selectedItem?.toString()) {
         "1 MHz" -> 1000000L
         "4 MHz" -> 4000000L
@@ -785,8 +825,9 @@ int main(void) {
             closeAnd {
                 android.app.AlertDialog.Builder(this)
                     .setTitle("Settings")
-                    .setMessage("Appearance is fixed to Dark Mode. You can still customize the editor font size.")
+                    .setMessage("Appearance is fixed to Dark Mode. Customize editor font size and compiler optimization.")
                     .setPositiveButton("Editor font size") { _, _ -> showFontSizeDialog() }
+                    .setNeutralButton("Optimization") { _, _ -> showOptimizationDialog() }
                     .setNegativeButton("Close", null).show()
             }
         }
@@ -896,6 +937,11 @@ int main(void) {
     }
 
     private fun exportArtifact(file: File?, mime: String, name: String) {
+        val currentSource = if (::editor.isInitialized) editor.text.toString() else ""
+        if (file != null && lastBuiltSourceHash != null && sourceHash(currentSource) != lastBuiltSourceHash) {
+            Toast.makeText(this, "Source changed since last build. Build again first.", Toast.LENGTH_LONG).show()
+            return
+        }
         if (file == null || !file.exists()) {
             Toast.makeText(this, "No generated file available yet.", Toast.LENGTH_SHORT).show()
             return
@@ -960,8 +1006,10 @@ int main(void) {
         }
         buildInProgress = true
         val selectedHz = selectedClockHz()
+        val selectedOptimization = optimizationLevel()
         val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
-        val sourceText = clockDefine(editor.text.toString(), selectedHz)
+        val sourceText = editor.text.toString()
+        val clockWarning = fCpuMismatchWarning(sourceText, selectedHz)
         status.text = "●  VERIFY RUNNING"
         statusBar.text = "${status.text}  ·  ${selectedHz/1000000} MHz"
         status.setTextColor(accent()); log.text = "Checking source in background..."
@@ -974,7 +1022,7 @@ int main(void) {
                 val process = avrProcessBuilder(
                     "-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/",
                     "-I${File(toolchain, "avr/include").absolutePath}",
-                    "-mmcu=$mcu", "-DF_CPU=${selectedHz}UL", "-std=gnu11", "-Os",
+                    "-mmcu=$mcu", "-DF_CPU=${selectedHz}UL", "-std=gnu11", selectedOptimization,
                     "-fsyntax-only", source.absolutePath
                 ).redirectErrorStream(true).redirectOutput(outputFile).start()
                 if (!process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) {
@@ -987,7 +1035,7 @@ int main(void) {
                     status.text = if (code == 0) "●  VERIFY PASSED" else "●  VERIFY FAILED"
                     statusBar.text = "${status.text}  ·  ${selectedHz/1000000} MHz"
                     status.setTextColor(if (code == 0) Color.rgb(46, 190, 130) else Color.RED)
-                    log.text = if (output.isBlank()) "No compiler errors found." else output
+                    log.text = (clockWarning ?: "") + if (output.isBlank()) "No compiler errors found." else output
                     buildInProgress = false
                 }
             } catch (e: Exception) {
@@ -1046,10 +1094,19 @@ int main(void) {
         }
         buildInProgress = true
         val selectedHz = selectedClockHz()
+        val selectedOptimization = optimizationLevel()
+        val selectedSourceText = editor.text.toString()
+        val clockWarning = fCpuMismatchWarning(selectedSourceText, selectedHz)
+        val selectedName = sourceTabs.getOrNull(currentTabIndex)?.name ?: if (sourceExtension == ".ino") "sketch.ino" else "main.c"
+        val selectedExtension = sourceExtension
+        val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
+        lastHexFile = null
+        lastElfFile = null
+        lastBuiltSourceHash = null
         status.text = "●  BUILD RUNNING"
         statusBar.text = "${status.text}  ·  ${selectedHz/1000000} MHz"
         status.setTextColor(accent())
-        log.text = "Preparing compiler...\\nPlease wait. You can keep the app open."
+        log.text = "Preparing compiler...\nPlease wait. You can keep the app open."
 
         Thread {
             fun publish(state: String, color: Int, message: String) {
@@ -1064,12 +1121,11 @@ int main(void) {
 
             try {
                 val dir = File(filesDir, "projects/untitled").apply { mkdirs() }
-                val selectedName = sourceTabs.getOrNull(currentTabIndex)?.name ?: if (sourceExtension == ".ino") "sketch.ino" else "main.c"
                 val source = File(dir, selectedName.replace(Regex("[^A-Za-z0-9_.-]"), "_"))
-                val sourceText = clockDefine(editor.text.toString(), selectedHz)
+                val sourceText = selectedSourceText
                 source.writeText(sourceText)
 
-                if (sourceExtension == ".ino") {
+                if (selectedExtension == ".ino") {
                     publish("●  ARDUINO CORE REQUIRED", Color.rgb(238, 165, 65),
                         "The .ino sketch was saved, but Arduino AVR Core and the sketch preprocessor are not integrated yet. Build is intentionally stopped.")
                     return@Thread
@@ -1079,15 +1135,14 @@ int main(void) {
                 val objcopy = File(filesDir, "toolchain/bin/avr-objcopy")
                 if (!gcc.isFile || !objcopy.isFile) {
                     publish("●  TOOLCHAIN MISSING", Color.rgb(238, 165, 65),
-                        "Source saved: ${source.absolutePath}\\n\\nAVR-GCC for Android ARM 32-bit is not integrated yet. No HEX or ELF was generated.")
+                        "Source saved: ${source.absolutePath}\n\nAVR-GCC for Android ARM 32-bit is not integrated yet. No HEX or ELF was generated.")
                     return@Thread
                 }
 
                 val elf = File(dir, "firmware.elf")
                 val hex = File(dir, "firmware.hex")
-                val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
                 val toolchain = File(filesDir, "toolchain")
-                runOnUiThread { log.text = "Compiling and linking AVR firmware...\\nThis may take a little while." }
+                runOnUiThread { log.text = "Compiling and linking AVR firmware...\nThis may take a little while." }
 
                 val objectFile = File(dir, "firmware.o")
                 val toolchainBin = File(toolchain, "bin").absolutePath
@@ -1097,7 +1152,7 @@ int main(void) {
                 val gccLibraryPath = File(toolchain, "lib/gcc/avr/7.3.0").absolutePath
 
                 fun runBuildStage(label: String, args: List<String>, timeoutSeconds: Long, outputFile: File, useObjcopy: Boolean = false): Pair<Int?, String> {
-                    runOnUiThread { log.text = "$label\\nPlease wait..." }
+                    runOnUiThread { log.text = "$label\nPlease wait..." }
                     val builder = if (useObjcopy) avrObjcopyProcessBuilder(*args.toTypedArray()) else avrProcessBuilder(*args.toTypedArray())
                     val process = builder
                         .redirectErrorStream(true)
@@ -1108,15 +1163,15 @@ int main(void) {
                         process.destroyForcibly()
                         process.waitFor()
                         val details = if (outputFile.isFile) outputFile.readText() else ""
-                        return Pair(null, "$label timed out after $timeoutSeconds seconds.\\n" +
+                        return Pair(null, "$label timed out after $timeoutSeconds seconds.\n" +
                             (if (details.isBlank()) "No diagnostic output was produced." else details))
                     }
                     val details = if (outputFile.isFile) outputFile.readText() else ""
                     return Pair(process.exitValue(), details)
                 }
 
-                // Keep the first Android ARMv7 compile conservative: disable optimizer/LTO
-                // until the cc1 runtime is proven stable on older 32-bit Android devices.
+                // -Os is the default: it reduces firmware size for the ATmega32A's 32 KB flash.
+                // Users can select -O0/-O1/-O2 in settings; LTO remains disabled for ARMv7 stability.
                 val commonArgs = listOf(
                     "-B$compilerPrefix/",
                     "-B$toolchainBin/",
@@ -1124,7 +1179,7 @@ int main(void) {
                     "-I$includePath",
                     "-L$gccLibraryPath",
                     "-L$libraryPath",
-                    "-mmcu=$mcu", "-DF_CPU=${selectedHz}UL", "-O0", "-fno-lto", "-std=gnu11"
+                    "-mmcu=$mcu", "-DF_CPU=${selectedHz}UL", selectedOptimization, "-fno-lto", "-std=gnu11"
                 )
 
                 val compileStage = runBuildStage(
@@ -1151,6 +1206,35 @@ int main(void) {
                     return@Thread
                 }
 
+                // Enforce the ATmega32A/ATmega32 32 KB flash limit when avr-size is available.
+                val sizeTool = File(toolchain, "bin/avr-size")
+                if (sizeTool.isFile && sizeTool.canExecute()) {
+                    try {
+                        val sizeLog = File(dir, "size-stage.log")
+                        val sizeProcess = avrToolProcessBuilder(sizeTool, "-B", elf.absolutePath)
+                            .redirectErrorStream(true).redirectOutput(sizeLog).start()
+                        if (sizeProcess.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                            val sizeLine = sizeLog.readLines().firstOrNull { line ->
+                                val fields = line.trim().split(Regex("\\s+"))
+                                fields.size >= 5 && fields[0].toLongOrNull() != null && fields[1].toLongOrNull() != null
+                            }
+                            val fields = sizeLine?.trim()?.split(Regex("\\s+"))
+                            val flashBytes = if (fields != null) {
+                                (fields[0].toLongOrNull() ?: 0L) + (fields[1].toLongOrNull() ?: 0L)
+                            } else 0L
+                            if (flashBytes > 32768L) {
+                                publish("●  FLASH SIZE EXCEEDED", Color.RED,
+                                    "Firmware uses $flashBytes bytes of flash; ATmega32A/ATmega32 limit is 32768 bytes. HEX export was stopped.")
+                                return@Thread
+                            }
+                        } else {
+                            sizeProcess.destroyForcibly()
+                        }
+                    } catch (_: Exception) {
+                        // Size summary is optional when avr-size cannot run on this package.
+                    }
+                }
+
                 val objcopyOutput = File(dir, "objcopy-build.log")
                 val objcopyStage = runBuildStage(
                     "Stage 3/3: generating Intel HEX file...",
@@ -1165,16 +1249,17 @@ int main(void) {
                         Color.RED, objcopyStage.second)
                     return@Thread
                 }
-                val messages = compileStage.second + "\\n" + linkStage.second
+                val messages = (clockWarning ?: "") + compileStage.second + "\n" + linkStage.second
                 if (!elf.isFile || elf.length() == 0L || !hex.isFile || hex.length() == 0L) {
-                    publish("●  BUILD FAILED", Color.RED, "Compiler finished but HEX/ELF output is missing or empty.\\n" + messages)
+                    publish("●  BUILD FAILED", Color.RED, "Compiler finished but HEX/ELF output is missing or empty.\n" + messages)
                     return@Thread
                 }
 
                 lastHexFile = hex
                 lastElfFile = elf
+                lastBuiltSourceHash = sourceHash(sourceText)
                 publish("●  BUILD SUCCESS", Color.rgb(46, 190, 130),
-                    "Firmware generated:\\n${hex.absolutePath}\\n${elf.absolutePath}\\n\\n$messages")
+                    "Firmware generated:\n${hex.absolutePath}\n${elf.absolutePath}\n\n$messages")
             } catch (e: Exception) {
                 publish("●  BUILD ERROR", Color.RED, e.toString())
             }
