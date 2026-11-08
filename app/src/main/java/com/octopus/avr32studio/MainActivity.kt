@@ -19,6 +19,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import java.io.File
+import java.security.MessageDigest
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.zip.ZipInputStream
@@ -42,6 +43,7 @@ class MainActivity : Activity() {
     private var consoleExpanded = false
     private var lastHexFile: File? = null
     private var lastElfFile: File? = null
+    private var lastBuiltSourceHash: String? = null
     private var sourceExtension = ".c"
     private var loadingSource = false
     private val sessionHandler = Handler(Looper.getMainLooper())
@@ -157,8 +159,11 @@ int main(void) {
 ISR(TIMER1_COMPA_vect) { PORTB ^= (1 << PB0); }
 int main(void) {
     DDRB |= (1 << PB0);
-    TCCR1B = (1 << WGM12) | (1 << CS12) | (1 << CS10);
-    OCR1A = 31249; TIMSK |= (1 << OCIE1A); TCCR1B = (1 << WGM12) | (1 << CS12); sei();
+    // CTC mode, prescaler 256: OCR1A=31249 gives a 1 Hz interrupt at 8 MHz.
+    TCCR1B = (1 << WGM12) | (1 << CS12);
+    OCR1A = 31249;
+    TIMSK |= (1 << OCIE1A);
+    sei();
     while (1) {}
 }
 """,
@@ -166,7 +171,7 @@ int main(void) {
 #include <avr/io.h>
 void uart_init(void) { UBRRH=0; UBRRL=51; UCSRB=(1<<TXEN); UCSRC=(1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0); }
 void uart_tx(char c) { while (!(UCSRA & (1<<UDRE))) {} UDR=c; }
-int main(void) { uart_init(); while (1) { uart_tx('O'); uart_tx('K'); uart_tx('\\r'); uart_tx('\\n'); } }
+int main(void) { uart_init(); while (1) { uart_tx('O'); uart_tx('K'); uart_tx('\r'); uart_tx('\n'); } }
 """,
             "ADC0 Read" to """#include <avr/io.h>
 int main(void) {
@@ -327,11 +332,20 @@ int main(void) {
     private fun text() = if (dark) Color.rgb(232, 239, 236) else Color.rgb(28, 42, 37)
     private fun muted() = if (dark) Color.rgb(157, 171, 165) else Color.rgb(105, 120, 112)
     private fun accent() = Color.rgb(82, 214, 176)
-    private fun clockDefine(source: String, hz: Long = selectedClockHz()): String {
-        val definition = "#define F_CPU ${hz}UL"
-        val pattern = Regex("(?m)^\\s*#\\s*define\\s+F_CPU\\s+[^\\r\\n]+")
-        return if (pattern.containsMatchIn(source)) pattern.replace(source, definition) else definition + "\n" + source
+    // Preserve source text so compiler diagnostics match the editor's line numbers.
+    private fun clockDefine(source: String, hz: Long = selectedClockHz()): String = source
+
+    private fun optimizationLevel(): String {
+        val value = getSharedPreferences("octo_settings", MODE_PRIVATE)
+            .getString("optimization_level", "-Os") ?: "-Os"
+        return if (value in setOf("-O0", "-O1", "-Os", "-O2")) value else "-Os"
     }
+
+    private fun sourceHash(source: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(source.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
     private fun selectedClockHz(): Long = when (clock.selectedItem?.toString()) {
         "1 MHz" -> 1000000L
         "4 MHz" -> 4000000L
@@ -896,6 +910,11 @@ int main(void) {
     }
 
     private fun exportArtifact(file: File?, mime: String, name: String) {
+        val currentSource = if (::editor.isInitialized) editor.text.toString() else ""
+        if (file != null && lastBuiltSourceHash != null && sourceHash(currentSource) != lastBuiltSourceHash) {
+            Toast.makeText(this, "Source changed since last build. Build again first.", Toast.LENGTH_LONG).show()
+            return
+        }
         if (file == null || !file.exists()) {
             Toast.makeText(this, "No generated file available yet.", Toast.LENGTH_SHORT).show()
             return
@@ -960,8 +979,9 @@ int main(void) {
         }
         buildInProgress = true
         val selectedHz = selectedClockHz()
+        val selectedOptimization = optimizationLevel()
         val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
-        val sourceText = clockDefine(editor.text.toString(), selectedHz)
+        val sourceText = editor.text.toString()
         status.text = "●  VERIFY RUNNING"
         statusBar.text = "${status.text}  ·  ${selectedHz/1000000} MHz"
         status.setTextColor(accent()); log.text = "Checking source in background..."
@@ -974,7 +994,7 @@ int main(void) {
                 val process = avrProcessBuilder(
                     "-B${File(toolchain, "libexec/gcc/avr/7.3.0").absolutePath}/",
                     "-I${File(toolchain, "avr/include").absolutePath}",
-                    "-mmcu=$mcu", "-DF_CPU=${selectedHz}UL", "-std=gnu11", "-Os",
+                    "-mmcu=$mcu", "-DF_CPU=${selectedHz}UL", "-std=gnu11", selectedOptimization,
                     "-fsyntax-only", source.absolutePath
                 ).redirectErrorStream(true).redirectOutput(outputFile).start()
                 if (!process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) {
@@ -1046,10 +1066,18 @@ int main(void) {
         }
         buildInProgress = true
         val selectedHz = selectedClockHz()
+        val selectedOptimization = optimizationLevel()
+        val selectedSourceText = editor.text.toString()
+        val selectedName = sourceTabs.getOrNull(currentTabIndex)?.name ?: if (sourceExtension == ".ino") "sketch.ino" else "main.c"
+        val selectedExtension = sourceExtension
+        val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
+        lastHexFile = null
+        lastElfFile = null
+        lastBuiltSourceHash = null
         status.text = "●  BUILD RUNNING"
         statusBar.text = "${status.text}  ·  ${selectedHz/1000000} MHz"
         status.setTextColor(accent())
-        log.text = "Preparing compiler...\\nPlease wait. You can keep the app open."
+        log.text = "Preparing compiler...\nPlease wait. You can keep the app open."
 
         Thread {
             fun publish(state: String, color: Int, message: String) {
@@ -1064,12 +1092,11 @@ int main(void) {
 
             try {
                 val dir = File(filesDir, "projects/untitled").apply { mkdirs() }
-                val selectedName = sourceTabs.getOrNull(currentTabIndex)?.name ?: if (sourceExtension == ".ino") "sketch.ino" else "main.c"
                 val source = File(dir, selectedName.replace(Regex("[^A-Za-z0-9_.-]"), "_"))
-                val sourceText = clockDefine(editor.text.toString(), selectedHz)
+                val sourceText = selectedSourceText
                 source.writeText(sourceText)
 
-                if (sourceExtension == ".ino") {
+                if (selectedExtension == ".ino") {
                     publish("●  ARDUINO CORE REQUIRED", Color.rgb(238, 165, 65),
                         "The .ino sketch was saved, but Arduino AVR Core and the sketch preprocessor are not integrated yet. Build is intentionally stopped.")
                     return@Thread
@@ -1079,15 +1106,14 @@ int main(void) {
                 val objcopy = File(filesDir, "toolchain/bin/avr-objcopy")
                 if (!gcc.isFile || !objcopy.isFile) {
                     publish("●  TOOLCHAIN MISSING", Color.rgb(238, 165, 65),
-                        "Source saved: ${source.absolutePath}\\n\\nAVR-GCC for Android ARM 32-bit is not integrated yet. No HEX or ELF was generated.")
+                        "Source saved: ${source.absolutePath}\n\nAVR-GCC for Android ARM 32-bit is not integrated yet. No HEX or ELF was generated.")
                     return@Thread
                 }
 
                 val elf = File(dir, "firmware.elf")
                 val hex = File(dir, "firmware.hex")
-                val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
                 val toolchain = File(filesDir, "toolchain")
-                runOnUiThread { log.text = "Compiling and linking AVR firmware...\\nThis may take a little while." }
+                runOnUiThread { log.text = "Compiling and linking AVR firmware...\nThis may take a little while." }
 
                 val objectFile = File(dir, "firmware.o")
                 val toolchainBin = File(toolchain, "bin").absolutePath
@@ -1097,7 +1123,7 @@ int main(void) {
                 val gccLibraryPath = File(toolchain, "lib/gcc/avr/7.3.0").absolutePath
 
                 fun runBuildStage(label: String, args: List<String>, timeoutSeconds: Long, outputFile: File, useObjcopy: Boolean = false): Pair<Int?, String> {
-                    runOnUiThread { log.text = "$label\\nPlease wait..." }
+                    runOnUiThread { log.text = "$label\nPlease wait..." }
                     val builder = if (useObjcopy) avrObjcopyProcessBuilder(*args.toTypedArray()) else avrProcessBuilder(*args.toTypedArray())
                     val process = builder
                         .redirectErrorStream(true)
@@ -1108,7 +1134,7 @@ int main(void) {
                         process.destroyForcibly()
                         process.waitFor()
                         val details = if (outputFile.isFile) outputFile.readText() else ""
-                        return Pair(null, "$label timed out after $timeoutSeconds seconds.\\n" +
+                        return Pair(null, "$label timed out after $timeoutSeconds seconds.\n" +
                             (if (details.isBlank()) "No diagnostic output was produced." else details))
                     }
                     val details = if (outputFile.isFile) outputFile.readText() else ""
@@ -1124,7 +1150,7 @@ int main(void) {
                     "-I$includePath",
                     "-L$gccLibraryPath",
                     "-L$libraryPath",
-                    "-mmcu=$mcu", "-DF_CPU=${selectedHz}UL", "-O0", "-fno-lto", "-std=gnu11"
+                    "-mmcu=$mcu", "-DF_CPU=${selectedHz}UL", selectedOptimization, "-fno-lto", "-std=gnu11"
                 )
 
                 val compileStage = runBuildStage(
@@ -1165,16 +1191,17 @@ int main(void) {
                         Color.RED, objcopyStage.second)
                     return@Thread
                 }
-                val messages = compileStage.second + "\\n" + linkStage.second
+                val messages = compileStage.second + "\n" + linkStage.second
                 if (!elf.isFile || elf.length() == 0L || !hex.isFile || hex.length() == 0L) {
-                    publish("●  BUILD FAILED", Color.RED, "Compiler finished but HEX/ELF output is missing or empty.\\n" + messages)
+                    publish("●  BUILD FAILED", Color.RED, "Compiler finished but HEX/ELF output is missing or empty.\n" + messages)
                     return@Thread
                 }
 
                 lastHexFile = hex
                 lastElfFile = elf
+                lastBuiltSourceHash = sourceHash(sourceText)
                 publish("●  BUILD SUCCESS", Color.rgb(46, 190, 130),
-                    "Firmware generated:\\n${hex.absolutePath}\\n${elf.absolutePath}\\n\\n$messages")
+                    "Firmware generated:\n${hex.absolutePath}\n${elf.absolutePath}\n\n$messages")
             } catch (e: Exception) {
                 publish("●  BUILD ERROR", Color.RED, e.toString())
             }
