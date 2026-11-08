@@ -341,6 +341,14 @@ int main(void) {
         return if (value in setOf("-O0", "-O1", "-Os", "-O2")) value else "-Os"
     }
 
+    private fun fCpuMismatchWarning(source: String, hz: Long): String? {
+        val match = Regex("(?m)^\\s*#\\s*define\\s+F_CPU\\s+([0-9]+)(?:UL|LU|U|L)?\\s*$").find(source)
+        val declared = match?.groupValues?.getOrNull(1)?.toLongOrNull() ?: return null
+        return if (declared != hz) {
+            "Warning: source defines F_CPU as ${declared} Hz, while the selected clock is ${hz} Hz. The source definition was left unchanged.\n"
+        } else null
+    }
+
     private fun sourceHash(source: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(source.toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
@@ -982,6 +990,7 @@ int main(void) {
         val selectedOptimization = optimizationLevel()
         val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
         val sourceText = editor.text.toString()
+        val clockWarning = fCpuMismatchWarning(sourceText, selectedHz)
         status.text = "●  VERIFY RUNNING"
         statusBar.text = "${status.text}  ·  ${selectedHz/1000000} MHz"
         status.setTextColor(accent()); log.text = "Checking source in background..."
@@ -1007,7 +1016,7 @@ int main(void) {
                     status.text = if (code == 0) "●  VERIFY PASSED" else "●  VERIFY FAILED"
                     statusBar.text = "${status.text}  ·  ${selectedHz/1000000} MHz"
                     status.setTextColor(if (code == 0) Color.rgb(46, 190, 130) else Color.RED)
-                    log.text = if (output.isBlank()) "No compiler errors found." else output
+                    log.text = (clockWarning ?: "") + if (output.isBlank()) "No compiler errors found." else output
                     buildInProgress = false
                 }
             } catch (e: Exception) {
@@ -1068,6 +1077,7 @@ int main(void) {
         val selectedHz = selectedClockHz()
         val selectedOptimization = optimizationLevel()
         val selectedSourceText = editor.text.toString()
+        val clockWarning = fCpuMismatchWarning(selectedSourceText, selectedHz)
         val selectedName = sourceTabs.getOrNull(currentTabIndex)?.name ?: if (sourceExtension == ".ino") "sketch.ino" else "main.c"
         val selectedExtension = sourceExtension
         val mcu = if (target.selectedItem?.toString() == "ATmega32A") "atmega32a" else "atmega32"
@@ -1141,8 +1151,8 @@ int main(void) {
                     return Pair(process.exitValue(), details)
                 }
 
-                // Keep the first Android ARMv7 compile conservative: disable optimizer/LTO
-                // until the cc1 runtime is proven stable on older 32-bit Android devices.
+                // -Os is the default: it reduces firmware size for the ATmega32A's 32 KB flash.
+                // Users can select -O0/-O1/-O2 in settings; LTO remains disabled for ARMv7 stability.
                 val commonArgs = listOf(
                     "-B$compilerPrefix/",
                     "-B$toolchainBin/",
@@ -1191,7 +1201,7 @@ int main(void) {
                         Color.RED, objcopyStage.second)
                     return@Thread
                 }
-                val messages = compileStage.second + "\n" + linkStage.second
+                val messages = (clockWarning ?: "") + compileStage.second + "\n" + linkStage.second
                 if (!elf.isFile || elf.length() == 0L || !hex.isFile || hex.length() == 0L) {
                     publish("●  BUILD FAILED", Color.RED, "Compiler finished but HEX/ELF output is missing or empty.\n" + messages)
                     return@Thread
