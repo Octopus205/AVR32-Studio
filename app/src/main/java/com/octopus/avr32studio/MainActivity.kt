@@ -332,9 +332,6 @@ int main(void) {
     private fun text() = if (dark) Color.rgb(232, 239, 236) else Color.rgb(28, 42, 37)
     private fun muted() = if (dark) Color.rgb(157, 171, 165) else Color.rgb(105, 120, 112)
     private fun accent() = Color.rgb(82, 214, 176)
-    // Preserve source text so compiler diagnostics match the editor's line numbers.
-    private fun clockDefine(source: String, hz: Long = selectedClockHz()): String = source
-
     private fun optimizationLevel(): String {
         val value = getSharedPreferences("octo_settings", MODE_PRIVATE)
             .getString("optimization_level", "-Os") ?: "-Os"
@@ -1185,6 +1182,35 @@ int main(void) {
                     publish(if (linkStage.first == null) "●  LINK STAGE TIMEOUT" else "●  LINK STAGE FAILED",
                         Color.RED, linkStage.second)
                     return@Thread
+                }
+
+                // Enforce the ATmega32A/ATmega32 32 KB flash limit when avr-size is available.
+                val sizeTool = File(toolchain, "bin/avr-size")
+                if (sizeTool.isFile && sizeTool.canExecute()) {
+                    try {
+                        val sizeLog = File(dir, "size-stage.log")
+                        val sizeProcess = avrToolProcessBuilder(sizeTool, "-B", elf.absolutePath)
+                            .redirectErrorStream(true).redirectOutput(sizeLog).start()
+                        if (sizeProcess.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                            val sizeLine = sizeLog.readLines().firstOrNull { line ->
+                                val fields = line.trim().split(Regex("\\s+"))
+                                fields.size >= 5 && fields[0].toLongOrNull() != null && fields[1].toLongOrNull() != null
+                            }
+                            val fields = sizeLine?.trim()?.split(Regex("\\s+"))
+                            val flashBytes = if (fields != null) {
+                                (fields[0].toLongOrNull() ?: 0L) + (fields[1].toLongOrNull() ?: 0L)
+                            } else 0L
+                            if (flashBytes > 32768L) {
+                                publish("●  FLASH SIZE EXCEEDED", Color.RED,
+                                    "Firmware uses $flashBytes bytes of flash; ATmega32A/ATmega32 limit is 32768 bytes. HEX export was stopped.")
+                                return@Thread
+                            }
+                        } else {
+                            sizeProcess.destroyForcibly()
+                        }
+                    } catch (_: Exception) {
+                        // Size summary is optional when avr-size cannot run on this package.
+                    }
                 }
 
                 val objcopyOutput = File(dir, "objcopy-build.log")
