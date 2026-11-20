@@ -1,0 +1,59 @@
+name: OctoAVR32A Android CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK & NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install host AVR & build packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-avr binutils-avr avr-libc bison flex texinfo zip unzip bzip2 xz-utils
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Build Android AVR Toolchain Assets (if missing)
+        run: |
+          if [ ! -f app/src/main/assets/avr_sysroot.zip ] || [ ! -f app/src/main/jniLibs/arm64-v8a/libavr_gcc.so ]; then
+            sdkmanager "ndk;29.0.14206865"
+            export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/29.0.14206865"
+            bash scripts/build_avr_toolchain_android.sh
+          fi
+
+      - name: Run Unit & Robolectric Acceptance Tests
+        run: ./gradlew :app:testDebugUnitTest
+
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OctoAVR32A-debug-apk
+          path: app/build/outputs/apk/debug/*.apk

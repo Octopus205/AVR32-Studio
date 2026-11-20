@@ -1,0 +1,6 @@
+{
+  "name": "OctoAVR32A",
+  "description": "Offline AVR C/C++ IDE and cross-compiler for ATmega32A on Android",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

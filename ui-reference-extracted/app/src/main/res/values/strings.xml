@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">OctoAVR32A</string>
+    <string name="action_save">Save</string>
+    <string name="action_verify">Verify</string>
+    <string name="action_build">Build</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_upload">Flash / Export</string>
+    <string name="action_more">More Options</string>
+    <string name="action_files">Project Explorer</string>
+    <string name="action_examples">ATmega32A Examples</string>
+    <string name="action_settings">Build Config</string>
+    <string name="action_hardware">Serial &amp; USB OTG</string>
+    <string name="action_search">Find &amp; Replace</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_redo">Redo</string>
+    <string name="action_format">Format Code</string>
+    <string name="action_clear_console">Clear</string>
+    <string name="action_copy_console">Copy Output</string>
+    <string name="console_title">Build Console</string>
+    <string name="status_ready">Ready</string>
+    <string name="status_verifying">Verifying…</string>
+    <string name="status_building">Building firmware…</string>
+    <string name="status_cancelled">Build cancelled</string>
+    <string name="zflasher_package">ru.zdevs.zflasher.avr</string>
+    <string name="error_no_hex_built">Build the project first to generate a .hex firmware image.</string>
+    <string name="error_toolchain_unavailable">AVR toolchain binaries could not be initialized.</string>
+</resources>

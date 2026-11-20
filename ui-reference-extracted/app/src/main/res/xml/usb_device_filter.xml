@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- USBasp / USBtinyISP (VOTI / Adafruit) -->
+    <usb-device vendor-id="5824" product-id="1500" />
+    <usb-device vendor-id="6017" product-id="3215" />
+    <!-- WCH CH340 / CH341 USB-UART -->
+    <usb-device vendor-id="6790" product-id="29987" />
+    <usb-device vendor-id="6790" product-id="21795" />
+    <!-- Silicon Labs CP210x USB-UART -->
+    <usb-device vendor-id="4292" product-id="60000" />
+    <!-- FTDI FT232R / FT2232 USB-UART -->
+    <usb-device vendor-id="1027" product-id="24577" />
+    <usb-device vendor-id="1027" product-id="24597" />
+    <!-- Arduino / Atmel ATmega16U2 / STK500 / AVRISP mkII -->
+    <usb-device vendor-id="9025" />
+    <usb-device vendor-id="1003" product-id="8452" />
+    <usb-device vendor-id="1003" product-id="8458" />
+</resources>
