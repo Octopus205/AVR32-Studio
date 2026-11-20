@@ -356,9 +356,23 @@ int main(void) {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        brand.addView(label("OctoAVR32A", if (compact) 17f else 20f, true, text()))
-        brand.addView(label("AVR DEVELOPMENT STUDIO", 9f, true, muted()))
+        val brand = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val brandIcon = ImageView(this).apply {
+            setImageResource(R.drawable.ic_launcher_original)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "OctoAVR32A octopus logo"
+        }
+        brand.addView(brandIcon, LinearLayout.LayoutParams(dp(38), dp(38)))
+        val brandText = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(9), 0, 0, 0)
+        }
+        brandText.addView(label("OctoAVR32A", if (compact) 17f else 20f, true, text()))
+        brandText.addView(label("AVR DEVELOPMENT STUDIO", 9f, true, muted()))
+        brand.addView(brandText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         toolbar.addView(brand, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val verify = toolbarAction("✓", "Verify source") { verifySource() }
         val build = toolbarAction("▶", "Build firmware") { compile() }
