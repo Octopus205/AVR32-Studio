@@ -356,6 +356,7 @@ int main(void) {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        // Keep the Octopus mark visible in the compact and tablet toolbars.
         val brand = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
