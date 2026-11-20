@@ -321,12 +321,12 @@ int main(void) {
             if (stroke != null) setStroke(dp(1), stroke)
         }
 
-    // Dark Graphite palette with an electric mint accent.
-    private fun page() = if (dark) Color.rgb(15, 17, 18) else Color.rgb(246, 248, 247)
-    private fun panel() = if (dark) Color.rgb(27, 31, 32) else Color.WHITE
-    private fun text() = if (dark) Color.rgb(232, 239, 236) else Color.rgb(28, 42, 37)
-    private fun muted() = if (dark) Color.rgb(157, 171, 165) else Color.rgb(105, 120, 112)
-    private fun accent() = Color.rgb(82, 214, 176)
+    // Octo Abyss palette ported from the Google AI Studio UI reference.
+    private fun page() = Color.rgb(8, 13, 26)             // #080D1A
+    private fun panel() = Color.rgb(27, 41, 69)            // #1B2945
+    private fun text() = Color.rgb(230, 237, 247)           // #E6EDF7
+    private fun muted() = Color.rgb(143, 163, 196)          // #8FA3C4
+    private fun accent() = Color.rgb(34, 211, 238)          // #22D3EE
     private fun clockDefine(source: String, hz: Long = selectedClockHz()): String {
         val definition = "#define F_CPU ${hz}UL"
         val pattern = Regex("(?m)^\\s*#\\s*define\\s+F_CPU\\s+[^\\r\\n]+")
@@ -403,7 +403,7 @@ int main(void) {
         editorHeader.addView(label("EDITOR", 10f, true, muted()), LinearLayout.LayoutParams(0, dp(30), 1f))
         filenameLabel = label((if (sourceTabs[currentTabIndex].dirty) "● " else "") + sourceTabs[currentTabIndex].name, 11f, true, accent()).apply {
             setPadding(dp(10), dp(5), dp(10), dp(5))
-            background = bg(if (dark) Color.rgb(31, 54, 82) else Color.rgb(229, 239, 252), 8)
+            background = bg(Color.rgb(20, 33, 59), 8, Color.rgb(37, 53, 84))
         }
         editorHeader.addView(filenameLabel)
         root.addView(editorHeader, marginTop(4))
@@ -423,7 +423,7 @@ int main(void) {
             setTextColor(muted())
             setPadding(dp(8), dp(12), dp(8), dp(12))
             gravity = Gravity.TOP or Gravity.END
-            setBackgroundColor(if (dark) Color.rgb(19, 22, 23) else Color.rgb(239, 244, 241))
+            setBackgroundColor(Color.rgb(10, 17, 32))
             text = "1"
         }
         editorCard.addView(gutter, LinearLayout.LayoutParams(dp(38), ViewGroup.LayoutParams.MATCH_PARENT))
@@ -467,7 +467,7 @@ int main(void) {
         // Collapsible output keeps the editor spacious on phone and tablet.
         val consoleHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; isClickable = true; setOnClickListener { toggleConsole() } }
         consoleHeader.addView(label("OUTPUT  ▸", 10f, true, muted()), LinearLayout.LayoutParams(0, dp(32), 1f))
-        status = label("● READY", 10f, true, Color.rgb(46, 190, 130))
+        status = label("● READY", 10f, true, Color.rgb(16, 185, 129))
         consoleHeader.addView(status)
         root.addView(consoleHeader, marginTop(6))
         outputCard = card().apply { visibility = View.GONE }
@@ -493,7 +493,7 @@ int main(void) {
         val copyLog = toolbarAction("⧉", "Copy console output") { copyConsoleOutput() }
         consoleActions.addView(copyLog)
         outputCard.addView(consoleActions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(32)))
-        outputCard.addView(logScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compact) 126 else 160)))
+        outputCard.addView(logScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compact) 168 else 210)))
         root.addView(outputCard)
         statusBar = label("ATmega32A  ·  8 MHz", 10f, true, muted()).apply { setPadding(dp(6), dp(8), dp(6), dp(2)) }
         root.addView(statusBar)
@@ -660,8 +660,8 @@ int main(void) {
             gravity = Gravity.CENTER
             background = bg(panel(), 10)
             setPadding(dp(9), dp(7), dp(9), dp(7))
-            minimumWidth = dp(42)
-            minimumHeight = dp(42)
+            minimumWidth = dp(48)
+            minimumHeight = dp(48)
             setOnClickListener { action() }
         }
 
@@ -1006,7 +1006,7 @@ int main(void) {
 
     private fun card() = LinearLayout(this).apply {
         setPadding(dp(10), dp(10), dp(10), dp(10))
-        background = bg(panel(), 16, if (dark) Color.rgb(36, 56, 82) else Color.rgb(222, 230, 240))
+        background = bg(panel(), 16, Color.rgb(37, 53, 84))
     }
 
     private fun marginTop(v: Int) = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(v) }
@@ -1023,12 +1023,12 @@ int main(void) {
             val lineStart = if (cursor == 0) 0 else source.lastIndexOf('\n', cursor - 1) + 1
             val foundEnd = source.indexOf('\n', cursor)
             val lineEnd = if (foundEnd < 0) source.length else foundEnd
-            if (lineEnd > lineStart) editable.setSpan(BackgroundColorSpan(if (dark) Color.rgb(31, 48, 70) else Color.rgb(235, 243, 253)), lineStart, lineEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (lineEnd > lineStart) editable.setSpan(BackgroundColorSpan(Color.rgb(20, 33, 59)), lineStart, lineEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         val patterns = listOf(
-            Pair("\\b(int|void|char|long|short|unsigned|volatile|const|return|while|for|if|else)\\b", Color.rgb(86, 174, 255)),
-            Pair("\\b(#define|#include)\\b", Color.rgb(190, 140, 255)),
-            Pair("\\b(DDRB|PORTB|PINA|DDRA|PORTA|PB[0-7]|PA[0-7]|F_CPU)\\b", Color.rgb(73, 205, 173)),
+            Pair("\\b(int|void|char|long|short|unsigned|volatile|const|return|while|for|if|else)\\b", Color.rgb(125, 211, 252)),
+            Pair("\\b(#define|#include)\\b", Color.rgb(192, 132, 252)),
+            Pair("\\b(DDRB|PORTB|PINA|DDRA|PORTA|PB[0-7]|PA[0-7]|F_CPU)\\b", Color.rgb(45, 212, 191)),
             Pair("//[^\\n]*", muted())
         )
         for ((pattern, color) in patterns) {
